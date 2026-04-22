@@ -1,28 +1,24 @@
 # Icon Board
 
-A Milanote-style visual workspace for [Obsidian](https://obsidian.md). Build rich dashboards with icon tiles, freeform canvases, kanban columns, sticky notes, checklists, images, bookmarks, and linked notes — all in a single `.iboard` file.
+A Milanote-style visual workspace for [Obsidian](https://obsidian.md). Build dashboards with icon tiles, freeform canvases, kanban columns, sticky notes, checklists, images, bookmarks, and linked notes, all in a single `.iboard` file.
 
 ## Features
 
 ### Grid Mode
 - **Icon tiles** linking to folders, notes, canvases, kanban files, and nested boards
 - Customisable icon (Lucide icon or emoji), colour, label, and subtitle
-- Drag-to-reorder, right-click context menu
 
 ### Freeform Canvas Mode
-- **Pan & zoom** canvas with dot-grid background
 - **Card types**: icon tiles, sticky notes, checklists, note links (with live preview), images, bookmarks, kanban columns
 - **Connections** between cards — straight or elbow-routed, with colour, thickness, style, arrowhead, and label options
 - **Multi-select** with marquee, group drag, alignment, and distribution
 - **Resize** any card from its corner handle
-- **Undo / redo** with 20-step history
 
 ### Kanban Columns
 - Drag items between columns
 - Inline markdown rendering in items
 - Link items to vault notes; add tag pills
 - Drop images directly into a column to attach them as items
-- WIP limits, colour coding, clear-done shortcut
 
 ### Image Support
 - Drag images from Finder or the Obsidian file explorer onto the canvas or into kanban columns
