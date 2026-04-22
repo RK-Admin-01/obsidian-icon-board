@@ -56,4 +56,4 @@ Symlink or copy the folder into your vault's `.obsidian/plugins/` directory, the
 
 ## License
 
-MIT — see [LICENSE](LICENSE)
+MIT [LICENSE](LICENSE)
