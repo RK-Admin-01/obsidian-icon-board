@@ -1,0 +1,1756 @@
+/* ============================================================
+   Icon Board — styles
+   ============================================================ */
+
+/* Container */
+.icon-board-container {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  background: var(--background-primary);
+}
+
+.icon-board-content {
+  flex: 1;
+  overflow-y: auto;
+  min-height: 0;
+}
+
+/* ── View header (back button + breadcrumb) ─────────────────── */
+.icon-board-view-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 24px 0;
+  flex-shrink: 0;
+}
+
+.icon-board-back-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  cursor: pointer;
+  color: var(--text-muted);
+  flex-shrink: 0;
+  transition: background 80ms ease, color 80ms ease;
+}
+
+.icon-board-back-btn:hover {
+  background: var(--background-modifier-hover);
+  color: var(--text-normal);
+}
+
+.icon-board-back-btn.is-hidden {
+  visibility: hidden;
+  pointer-events: none;
+}
+
+.icon-board-back-btn svg {
+  width: 16px;
+  height: 16px;
+}
+
+/* ── Breadcrumb ─────────────────────────────────────────────── */
+.icon-board-breadcrumb {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 2px;
+  padding: 0;
+  font-size: 14px;
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+
+.icon-board-breadcrumb-ancestor {
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 2px 4px;
+  border-radius: 4px;
+  transition: color 80ms ease;
+}
+
+.icon-board-breadcrumb-ancestor:hover {
+  color: var(--text-normal);
+}
+
+.icon-board-breadcrumb-sep {
+  color: var(--text-faint);
+  padding: 0 6px;
+  user-select: none;
+}
+
+.icon-board-breadcrumb-current {
+  color: var(--text-normal);
+  font-weight: 600;
+  padding: 2px 4px;
+}
+
+/* ── Grid ───────────────────────────────────────────────────── */
+.icon-board-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 32px 24px;
+  padding: 32px;
+}
+
+/* ── Tile wrapper (holds tile square + label + subtitle) ─────── */
+.icon-board-tile-wrapper {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  outline: none;
+  border-radius: 4px;
+}
+
+/* Keyboard focus ring — appears around the tile square */
+.icon-board-tile-wrapper:focus-visible .icon-board-tile {
+  box-shadow: 0 0 0 3px var(--interactive-accent), 0 8px 24px rgba(0, 0, 0, 0.15);
+  transform: scale(1.04);
+}
+
+/* ── Tile square ────────────────────────────────────────────── */
+.icon-board-tile {
+  width: 112px;
+  height: 112px;
+  border-radius: 22px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: transform 150ms ease, box-shadow 150ms ease;
+  position: relative;
+  flex-shrink: 0;
+}
+
+.icon-board-tile-wrapper:hover .icon-board-tile {
+  transform: scale(1.04);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
+}
+
+/* Small chevron in the bottom-right of board tiles */
+.icon-board-tile-board-indicator {
+  position: absolute;
+  bottom: 6px;
+  right: 8px;
+  width: 16px;
+  height: 16px;
+  opacity: 0.7;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.icon-board-tile-board-indicator svg {
+  width: 14px;
+  height: 14px;
+}
+
+/* Icon inside the tile */
+.icon-board-tile-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 55%;
+  height: 55%;
+}
+
+/* Lucide SVG icons */
+.icon-board-tile-icon svg {
+  width: 100%;
+  height: 100%;
+}
+
+/* Emoji variant */
+.icon-board-tile-emoji {
+  font-size: 38px;
+  line-height: 1;
+  width: auto;
+  height: auto;
+}
+
+/* ── Tile label ─────────────────────────────────────────────── */
+.icon-board-tile-label {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-normal);
+  text-align: center;
+  max-width: 128px;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  line-height: 1.3;
+  word-break: break-word;
+}
+
+/* ── Tile subtitle ──────────────────────────────────────────── */
+.icon-board-tile-subtitle {
+  font-size: 12px;
+  color: var(--text-muted);
+  text-align: center;
+  max-width: 128px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ── Freeform canvas ────────────────────────────────────────── */
+
+.icon-board-canvas-outer {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  cursor: default;
+  user-select: none;
+  /* Dot grid background — values updated dynamically via JS */
+  background-image: radial-gradient(
+    circle,
+    var(--background-modifier-border) 1.5px,
+    transparent 1.5px
+  );
+  background-size: 32px 32px;
+  outline: none;
+}
+
+.icon-board-canvas-inner {
+  position: absolute;
+  top: 0;
+  left: 0;
+  transform-origin: 0 0;
+  will-change: transform;
+}
+
+/* ── Freeform cards ─────────────────────────────────────────── */
+
+.icon-board-freeform-card {
+  position: absolute;
+  display: flex;
+  flex-direction: column;
+  cursor: grab;
+  box-sizing: border-box;
+  border-radius: 12px;
+  transition: box-shadow 120ms ease;
+}
+
+/* Tile-specific layout within the base card */
+.icon-board-freeform-tile-card {
+  align-items: center;
+  justify-content: flex-start;
+  padding: 8px 8px 0;
+  gap: 5px;
+}
+
+.icon-board-freeform-card:active {
+  cursor: grabbing;
+}
+
+.icon-board-freeform-card.is-selected {
+  box-shadow: 0 0 0 2px var(--interactive-accent), 0 4px 16px rgba(0,0,0,0.12);
+}
+
+/* Tile square inside freeform card */
+.icon-board-freeform-tile-square {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  position: relative;
+}
+
+/* ── Resize handle ──────────────────────────────────────────── */
+
+.icon-board-card-resize-handle {
+  position: absolute;
+  bottom: 4px;
+  right: 4px;
+  width: 12px;
+  height: 12px;
+  background: var(--interactive-accent);
+  border-radius: 3px;
+  cursor: se-resize;
+  opacity: 0;
+  transition: opacity 100ms ease;
+}
+
+.icon-board-freeform-card.is-selected .icon-board-card-resize-handle {
+  opacity: 1;
+}
+
+/* ── Marquee ────────────────────────────────────────────────── */
+
+.icon-board-marquee {
+  position: absolute;
+  pointer-events: none;
+  border: 2px solid var(--interactive-accent);
+  background: color-mix(in srgb, var(--interactive-accent) 10%, transparent);
+  border-radius: 4px;
+  z-index: 9999;
+}
+
+/* ── Freeform toolbar ───────────────────────────────────────── */
+
+.icon-board-freeform-toolbar {
+  position: absolute;
+  bottom: 24px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 4px;
+  background: var(--background-secondary);
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 14px;
+  padding: 8px 12px;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.12);
+  z-index: 100;
+}
+
+/* Wrapper around the 6 action buttons */
+.icon-board-freeform-toolbar-btns {
+  display: flex;
+  gap: 4px;
+}
+
+.icon-board-freeform-toolbar-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 8px 12px;
+  border-radius: 10px;
+  cursor: pointer;
+  color: var(--text-muted);
+  transition: background 80ms ease, color 80ms ease;
+  min-width: 56px;
+}
+
+.icon-board-freeform-toolbar-btn:hover,
+.icon-board-freeform-toolbar-btn:focus-visible {
+  background: var(--background-modifier-hover);
+  color: var(--interactive-accent);
+  outline: none;
+}
+
+.icon-board-freeform-toolbar-btn.is-active {
+  background: var(--background-modifier-hover);
+  color: var(--interactive-accent);
+}
+
+.icon-board-freeform-toolbar-btn.is-active .icon-board-freeform-toolbar-btn-icon {
+  color: var(--interactive-accent);
+}
+
+.icon-board-freeform-toolbar-btn-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+}
+
+.icon-board-freeform-toolbar-btn-icon svg {
+  width: 20px;
+  height: 20px;
+}
+
+.icon-board-freeform-toolbar-btn-label {
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1;
+  text-align: center;
+}
+
+/* ── Toolbar FAB (narrow / mobile screens) ──────────────────── */
+
+.icon-board-freeform-toolbar-fab {
+  display: none;
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background: var(--interactive-accent);
+  color: var(--text-on-accent);
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  flex-shrink: 0;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.2);
+  transition: transform 100ms ease;
+}
+
+.icon-board-freeform-toolbar-fab:active { transform: scale(0.92); }
+.icon-board-freeform-toolbar-fab svg { width: 22px; height: 22px; }
+
+@media (max-width: 540px) {
+  .icon-board-freeform-toolbar {
+    left: auto;
+    right: 24px;
+    transform: none;
+    flex-direction: column-reverse;
+    align-items: flex-end;
+    background: transparent;
+    border: none;
+    box-shadow: none;
+    padding: 0;
+    border-radius: 0;
+    gap: 8px;
+  }
+
+  .icon-board-freeform-toolbar-fab {
+    display: flex;
+  }
+
+  .icon-board-freeform-toolbar-btns {
+    display: none;
+    flex-direction: column;
+    gap: 2px;
+    background: var(--background-secondary);
+    border: 1px solid var(--background-modifier-border);
+    border-radius: 12px;
+    padding: 6px 8px;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.12);
+    min-width: 160px;
+  }
+
+  .icon-board-freeform-toolbar.is-open .icon-board-freeform-toolbar-btns {
+    display: flex;
+  }
+
+  .icon-board-freeform-toolbar-btn {
+    flex-direction: row;
+    justify-content: flex-start;
+    min-width: 0;
+    padding: 8px 10px;
+    border-radius: 8px;
+    gap: 8px;
+  }
+}
+
+/* ── Connection properties panel ───────────────────────────── */
+
+.icon-board-conn-props {
+  position: absolute;
+  bottom: 104px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  background: var(--background-secondary);
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 12px;
+  padding: 6px 10px;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.12);
+  z-index: 101;
+  white-space: nowrap;
+  max-width: calc(100vw - 40px);
+  overflow-x: auto;
+}
+
+.icon-board-conn-props-group {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.icon-board-conn-props-sep {
+  width: 1px;
+  height: 20px;
+  background: var(--background-modifier-border);
+  margin: 0 4px;
+  flex-shrink: 0;
+}
+
+.icon-board-conn-props-swatch {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  cursor: pointer;
+  border: 2px solid transparent;
+  flex-shrink: 0;
+  transition: transform 80ms ease;
+}
+
+.icon-board-conn-props-swatch:hover {
+  transform: scale(1.25);
+}
+
+.icon-board-conn-props-swatch.is-active {
+  border-color: var(--background-primary);
+  box-shadow: 0 0 0 2px var(--interactive-accent);
+}
+
+.icon-board-conn-props-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  cursor: pointer;
+  color: var(--text-muted);
+  flex-shrink: 0;
+  transition: background 80ms ease, color 80ms ease;
+}
+
+.icon-board-conn-props-btn:hover {
+  background: var(--background-modifier-hover);
+  color: var(--text-normal);
+}
+
+.icon-board-conn-props-btn.is-active {
+  background: var(--background-modifier-hover);
+  color: var(--interactive-accent);
+}
+
+.icon-board-conn-props-btn svg {
+  width: 15px;
+  height: 15px;
+}
+
+.icon-board-conn-props-delete {
+  color: var(--text-error, #ef4444);
+}
+
+.icon-board-conn-props-delete:hover {
+  background: rgba(239,68,68,0.1) !important;
+  color: var(--text-error, #ef4444) !important;
+}
+
+.icon-board-conn-props-label-wrap {
+  padding: 4px 8px 0;
+  width: 220px;
+}
+
+.icon-board-conn-props-label-input {
+  width: 100%;
+  padding: 4px 8px;
+  border-radius: 4px;
+  border: 1px solid var(--background-modifier-border);
+  background: var(--background-secondary);
+  color: var(--text-normal);
+  font-size: 12px;
+  box-sizing: border-box;
+  outline: none;
+}
+
+.icon-board-conn-props-label-input:focus {
+  border-color: var(--interactive-accent);
+}
+
+/* ── Zoom pill ──────────────────────────────────────────────── */
+
+.icon-board-zoom-pill {
+  position: absolute;
+  bottom: 24px;
+  right: 24px;
+  background: var(--background-secondary);
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 8px;
+  padding: 6px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-muted);
+  cursor: pointer;
+  z-index: 100;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+  transition: color 80ms ease, border-color 80ms ease;
+  user-select: none;
+}
+
+.icon-board-zoom-pill:hover {
+  color: var(--interactive-accent);
+  border-color: var(--interactive-accent);
+}
+
+/* ── Kanban column card ──────────────────────────────────────── */
+
+.icon-board-freeform-kanban-card {
+  flex-direction: column;
+  align-items: stretch;
+  justify-content: flex-start;
+  border-radius: 12px;
+  border: 1px solid var(--background-modifier-border);
+  box-shadow: 0 2px 12px rgba(0,0,0,0.08);
+  background: var(--background-secondary);
+  overflow: hidden;
+  gap: 0;
+  padding: 0;
+}
+
+.icon-board-kanban-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 10px;
+  height: 38px;
+  flex-shrink: 0;
+  cursor: grab;
+  border-top: 3px solid transparent;
+  border-bottom: 1px solid var(--background-modifier-border);
+  user-select: none;
+}
+
+.icon-board-kanban-header:active {
+  cursor: grabbing;
+}
+
+.icon-board-kanban-title {
+  flex: 1;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-normal);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+
+.icon-board-kanban-title.icon-board-kanban-title-empty {
+  opacity: 0.4;
+  font-weight: 400;
+}
+
+.icon-board-kanban-col-count {
+  font-size: 11px;
+  font-weight: 400;
+  color: var(--text-faint);
+  flex-shrink: 0;
+}
+
+.icon-board-kanban-wip-dot {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--text-error, #ef4444);
+  flex-shrink: 0;
+}
+
+.icon-board-kanban-items {
+  flex: 1;
+  overflow-y: auto;
+  padding: 6px 8px 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  min-height: 0;
+}
+
+.icon-board-kanban-item {
+  background: var(--background-primary);
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 6px;
+  padding: 6px 8px;
+  font-size: 13px;
+  color: var(--text-normal);
+  min-height: 32px;
+  line-height: 1.4;
+  flex-shrink: 0;
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  cursor: pointer;
+  position: relative;
+}
+
+.icon-board-kanban-item.is-done {
+  opacity: 0.55;
+}
+
+.icon-board-kanban-item.is-done .icon-board-kanban-item-text {
+  text-decoration: line-through;
+}
+
+.icon-board-kanban-item-cb {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  border: 1.5px solid var(--text-muted);
+  flex-shrink: 0;
+  margin-top: 1px;
+  cursor: pointer;
+  position: relative;
+  transition: background 0.12s, border-color 0.12s;
+}
+
+.icon-board-kanban-item-cb.is-checked {
+  background: var(--interactive-accent);
+  border-color: var(--interactive-accent);
+}
+
+.icon-board-kanban-item-cb.is-checked::after {
+  content: '';
+  position: absolute;
+  top: 3px;
+  left: 4px;
+  width: 5px;
+  height: 3px;
+  border-left: 1.5px solid white;
+  border-bottom: 1.5px solid white;
+  transform: rotate(-45deg);
+}
+
+.icon-board-kanban-item-body {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.icon-board-kanban-item-text {
+  word-break: break-word;
+  line-height: 1.4;
+}
+
+.icon-board-kanban-item-text p,
+.icon-board-kanban-item-text ul,
+.icon-board-kanban-item-text ol {
+  margin: 0;
+}
+
+.icon-board-kanban-item-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  align-items: center;
+}
+
+.icon-board-kanban-item-note-pill {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  background: var(--background-modifier-hover);
+  border-radius: 10px;
+  padding: 1px 7px 1px 5px;
+  font-size: 11px;
+  color: var(--text-muted);
+  cursor: pointer;
+  max-width: 140px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  transition: color 0.1s, background 0.1s;
+}
+
+.icon-board-kanban-item-note-pill:hover {
+  color: var(--text-normal);
+  background: var(--background-modifier-border);
+}
+
+.icon-board-kanban-item-note-pill svg {
+  width: 10px;
+  height: 10px;
+  flex-shrink: 0;
+}
+
+.icon-board-kanban-item-tag {
+  display: inline-flex;
+  align-items: center;
+  background: color-mix(in srgb, var(--interactive-accent) 12%, transparent);
+  color: var(--interactive-accent);
+  border-radius: 10px;
+  padding: 1px 7px;
+  font-size: 11px;
+}
+
+.icon-board-kanban-item-image {
+  border-radius: 4px;
+  overflow: hidden;
+  margin-top: 2px;
+}
+
+.icon-board-kanban-item-image img {
+  width: 100%;
+  height: auto;
+  display: block;
+  border-radius: 4px;
+  pointer-events: none;
+}
+
+.icon-board-kanban-items.is-drag-over {
+  outline: 2px dashed var(--interactive-accent);
+  outline-offset: -2px;
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--interactive-accent) 8%, transparent);
+}
+
+.icon-board-kanban-item-del {
+  flex-shrink: 0;
+  width: 16px;
+  height: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-faint);
+  opacity: 0;
+  cursor: pointer;
+  transition: opacity 0.1s, color 0.1s;
+  margin-top: 1px;
+}
+
+.icon-board-kanban-item-del svg {
+  width: 12px;
+  height: 12px;
+}
+
+.icon-board-kanban-item:hover .icon-board-kanban-item-del {
+  opacity: 1;
+}
+
+.icon-board-kanban-item-del:hover {
+  color: var(--text-error, #ef4444);
+}
+
+.icon-board-kanban-item.is-dragging {
+  opacity: 0.3;
+}
+
+.icon-board-kanban-item.is-editing .icon-board-kanban-item-del {
+  display: none;
+}
+
+.icon-board-kanban-item-editor {
+  width: 100%;
+  resize: none;
+  overflow: hidden;
+  background: transparent;
+  border: none;
+  outline: none;
+  font: inherit;
+  color: inherit;
+  padding: 0;
+  margin: 0;
+  line-height: 1.4;
+}
+
+.icon-board-kanban-drag-ghost {
+  position: fixed;
+  z-index: 9999;
+  background: var(--background-primary);
+  border: 1px solid var(--interactive-accent);
+  border-radius: 6px;
+  padding: 6px 8px;
+  font-size: 13px;
+  color: var(--text-normal);
+  box-shadow: 0 4px 16px rgba(0,0,0,0.2);
+  opacity: 0.9;
+  word-break: break-word;
+  line-height: 1.4;
+}
+
+.icon-board-kanban-drop-indicator {
+  height: 2px;
+  background: var(--interactive-accent);
+  border-radius: 1px;
+  margin: 1px 0;
+  flex-shrink: 0;
+}
+
+.icon-board-kanban-add-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 10px;
+  color: var(--text-faint);
+  font-size: 12px;
+  cursor: pointer;
+  border-top: 1px solid var(--background-modifier-border);
+  flex-shrink: 0;
+  user-select: none;
+  transition: color 0.1s, background 0.1s;
+}
+
+.icon-board-kanban-add-btn:hover {
+  color: var(--text-normal);
+  background: var(--background-modifier-hover);
+}
+
+.icon-board-kanban-add-btn svg {
+  width: 14px;
+  height: 14px;
+}
+
+.icon-board-kanban-title-input {
+  width: 100%;
+  background: transparent;
+  border: none;
+  outline: none;
+  font: inherit;
+  color: var(--text-normal);
+  padding: 0;
+  margin: 0;
+}
+
+/* ── Connection handles & connect mode ──────────────────────── */
+
+.icon-board-connection-handle {
+  position: absolute;
+  width: 10px;
+  height: 10px;
+  background: var(--interactive-accent);
+  border: 2px solid var(--background-primary);
+  border-radius: 50%;
+  opacity: 0;
+  transition: opacity 0.12s ease;
+  cursor: crosshair;
+  z-index: 10;
+  pointer-events: auto;
+}
+
+.icon-board-connection-handle-n {
+  top: -5px;
+  left: calc(50% - 5px);
+}
+.icon-board-connection-handle-s {
+  bottom: -5px;
+  left: calc(50% - 5px);
+}
+.icon-board-connection-handle-e {
+  right: -5px;
+  top: calc(50% - 5px);
+}
+.icon-board-connection-handle-w {
+  left: -5px;
+  top: calc(50% - 5px);
+}
+
+.icon-board-freeform-card:hover .icon-board-connection-handle,
+.icon-board-canvas-outer.is-connect-mode .icon-board-connection-handle {
+  opacity: 1;
+}
+
+.icon-board-freeform-card.is-connect-source {
+  outline: 2px solid var(--interactive-accent);
+  outline-offset: 2px;
+}
+
+.icon-board-freeform-card.is-connect-target {
+  outline: 2px solid var(--color-green, #4caf50);
+  outline-offset: 2px;
+}
+
+.icon-board-canvas-outer.is-connect-mode {
+  cursor: crosshair;
+}
+
+/* ── Sticky card ────────────────────────────────────────────── */
+
+.icon-board-freeform-sticky-card {
+  align-items: stretch;
+  justify-content: flex-start;
+  padding: 12px;
+  border-radius: 12px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.10);
+  gap: 0;
+  overflow: hidden;
+}
+
+.icon-board-sticky-text {
+  flex: 1;
+  overflow: hidden;
+  font-size: 14px;
+  line-height: 1.5;
+  color: rgba(0,0,0,0.75);
+  word-break: break-word;
+  cursor: text;
+  /* let clicks through to the card div for dragging */
+}
+
+.icon-board-sticky-text p { margin: 0 0 4px; }
+.icon-board-sticky-text p:last-child { margin-bottom: 0; }
+
+.icon-board-sticky-editor {
+  flex: 1;
+  width: 100%;
+  min-height: 0;
+  /* inherit the sticky card's background color so it stays solid during editing */
+  background: transparent !important;
+  background-color: transparent !important;
+  border: none !important;
+  outline: none;
+  box-shadow: none !important;
+  resize: none;
+  font-size: 14px;
+  line-height: 1.5;
+  font-family: var(--font-text);
+  color: rgba(0,0,0,0.75);
+  padding: 0;
+  box-sizing: border-box;
+}
+
+/* ── Checklist card ─────────────────────────────────────────── */
+
+.icon-board-freeform-checklist-card {
+  align-items: stretch;
+  justify-content: flex-start;
+  padding: 12px;
+  border-radius: 12px;
+  border: 1px solid var(--background-modifier-border);
+  box-shadow: 0 2px 8px rgba(0,0,0,0.07);
+  gap: 0;
+}
+
+.icon-board-checklist-title {
+  width: 100%;
+  background: transparent !important;
+  border: none !important;
+  outline: none;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-normal);
+  padding: 0 0 8px;
+  box-sizing: border-box;
+  border-bottom: 1px solid var(--background-modifier-border);
+  margin-bottom: 6px;
+}
+
+.icon-board-checklist-list {
+  flex: 1;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-height: 0;
+}
+
+.icon-board-checklist-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 0;
+}
+
+.icon-board-checklist-cb {
+  /* Override Obsidian theme styles that may hide or restyle checkboxes */
+  appearance: checkbox !important;
+  -webkit-appearance: checkbox !important;
+  display: block !important;
+  opacity: 1 !important;
+  flex-shrink: 0;
+  width: 15px !important;
+  height: 15px !important;
+  min-width: 15px;
+  margin: 0;
+  padding: 0;
+  cursor: pointer;
+  accent-color: var(--interactive-accent);
+  border: none;
+  background: revert;
+}
+
+.icon-board-checklist-item-input {
+  flex: 1;
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+  outline: none;
+  font-size: 13px;
+  color: var(--text-normal);
+  padding: 0;
+  min-width: 0;
+}
+
+.icon-board-checklist-item.is-done .icon-board-checklist-item-input {
+  text-decoration: line-through;
+  opacity: 0.5;
+}
+
+.icon-board-checklist-add {
+  margin-top: 6px;
+  font-size: 12px;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 2px 0;
+  transition: color 80ms ease;
+  flex-shrink: 0;
+}
+
+.icon-board-checklist-add:hover { color: var(--interactive-accent); }
+
+/* ── NoteLink card ──────────────────────────────────────────── */
+
+.icon-board-freeform-notelink-card {
+  align-items: stretch;
+  justify-content: flex-start;
+  padding: 0;
+  border-radius: 10px;
+  border: 1px solid var(--background-modifier-border);
+  box-shadow: 0 2px 8px rgba(0,0,0,0.07);
+  gap: 0;
+  overflow: hidden;
+  background: var(--background-secondary);
+}
+
+.icon-board-notelink-titlebar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--background-modifier-border);
+  flex-shrink: 0;
+  background: var(--background-secondary);
+  cursor: grab;
+}
+
+.icon-board-notelink-icon {
+  flex-shrink: 0;
+  width: 16px;
+  height: 16px;
+  color: var(--text-muted);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.icon-board-notelink-icon svg { width: 14px; height: 14px; }
+
+.icon-board-notelink-title {
+  flex: 1;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-normal);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
+
+.icon-board-notelink-mode-btn {
+  flex-shrink: 0;
+  width: 22px;
+  height: 22px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: none;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  color: var(--text-muted);
+  padding: 0;
+  transition: background 80ms ease, color 80ms ease;
+  box-shadow: none;
+}
+
+.icon-board-notelink-mode-btn:hover {
+  background: var(--background-modifier-hover);
+  color: var(--interactive-accent);
+}
+
+.icon-board-notelink-mode-btn svg { width: 14px; height: 14px; }
+
+.icon-board-notelink-preview {
+  flex: 1;
+  overflow-y: auto;
+  padding: 10px 12px;
+  font-size: 13px;
+  line-height: 1.5;
+  min-height: 0;
+  background: var(--background-primary);
+}
+
+.icon-board-notelink-preview > * { pointer-events: none; }
+
+/* ── Image card ─────────────────────────────────────────────── */
+
+.icon-board-freeform-image-card {
+  align-items: stretch;
+  justify-content: flex-start;
+  padding: 0;
+  border-radius: 10px;
+  overflow: hidden;
+  background: var(--background-secondary);
+  border: 1px solid var(--background-modifier-border);
+  gap: 0;
+}
+
+.icon-board-image-wrap {
+  flex: 1;
+  overflow: hidden;
+  min-height: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--background-modifier-form-field);
+}
+
+.icon-board-image-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.icon-board-image-missing {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  color: var(--text-faint);
+  font-size: 12px;
+  padding: 16px;
+  text-align: center;
+}
+
+.icon-board-image-missing svg {
+  width: 28px;
+  height: 28px;
+  opacity: 0.4;
+}
+
+.icon-board-image-caption {
+  flex-shrink: 0;
+  width: 100%;
+  background: transparent !important;
+  border: none !important;
+  border-top: 1px solid var(--background-modifier-border) !important;
+  outline: none;
+  font-size: 12px;
+  color: var(--text-muted);
+  padding: 5px 8px;
+  box-sizing: border-box;
+  font-family: var(--font-text);
+  box-shadow: none !important;
+}
+
+.icon-board-image-caption::placeholder { color: var(--text-faint); }
+
+/* ── Bookmark card ──────────────────────────────────────────── */
+
+.icon-board-freeform-bookmark-card {
+  align-items: stretch;
+  justify-content: flex-start;
+  padding: 0;
+  border-radius: 10px;
+  border: 1px solid var(--background-modifier-border);
+  box-shadow: 0 2px 8px rgba(0,0,0,0.07);
+  overflow: hidden;
+  background: var(--background-secondary);
+  gap: 0;
+  cursor: pointer;
+}
+
+.icon-board-bookmark-image-wrap {
+  width: 100%;
+  height: 55%;
+  overflow: hidden;
+  flex-shrink: 0;
+  background: var(--background-modifier-form-field);
+}
+
+.icon-board-bookmark-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.icon-board-bookmark-content {
+  flex: 1;
+  padding: 8px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  overflow: hidden;
+  min-height: 0;
+}
+
+.icon-board-bookmark-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-normal);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  line-height: 1.4;
+  word-break: break-word;
+}
+
+.icon-board-bookmark-desc {
+  font-size: 12px;
+  color: var(--text-muted);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  line-height: 1.4;
+  flex: 1;
+  min-height: 0;
+  word-break: break-word;
+}
+
+.icon-board-bookmark-footer {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 6px 10px;
+  border-top: 1px solid var(--background-modifier-border);
+  flex-shrink: 0;
+  background: var(--background-primary);
+}
+
+.icon-board-bookmark-favicon {
+  width: 14px;
+  height: 14px;
+  object-fit: contain;
+  flex-shrink: 0;
+}
+
+.icon-board-bookmark-domain {
+  font-size: 11px;
+  color: var(--text-faint);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  flex: 1;
+  min-width: 0;
+}
+
+.icon-board-bookmark-loading {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  color: var(--text-muted);
+  font-size: 12px;
+  padding: 16px;
+}
+
+.icon-board-bookmark-fail {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
+  gap: 6px;
+  padding: 10px;
+}
+
+.icon-board-bookmark-fail-url {
+  font-size: 12px;
+  color: var(--text-muted);
+  word-break: break-all;
+  line-height: 1.4;
+}
+
+.icon-board-bookmark-retry {
+  font-size: 12px;
+  padding: 3px 10px;
+  border-radius: 6px;
+  border: 1px solid var(--background-modifier-border);
+  background: var(--background-primary);
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: background 80ms ease, color 80ms ease;
+  box-shadow: none;
+}
+
+.icon-board-bookmark-retry:hover {
+  background: var(--background-modifier-hover);
+  color: var(--interactive-accent);
+}
+
+/* ── "Add tile" button ──────────────────────────────────────── */
+.icon-board-add-tile {
+  width: 112px;
+  height: 112px;
+  border-radius: 22px;
+  border: 2px dashed var(--text-muted);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: border-color 150ms ease, color 150ms ease;
+  color: var(--text-muted);
+  flex-shrink: 0;
+  align-self: start;
+}
+
+.icon-board-add-tile:hover,
+.icon-board-add-tile:focus-visible {
+  border-color: var(--interactive-accent);
+  color: var(--interactive-accent);
+  outline: none;
+}
+
+.icon-board-add-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 50%;
+  height: 50%;
+}
+
+.icon-board-add-icon svg {
+  width: 100%;
+  height: 100%;
+}
+
+/* ── Drag states ────────────────────────────────────────────── */
+
+/* The tile being dragged */
+.icon-board-tile-chosen {
+  opacity: 0.5;
+}
+
+/* The ghost placeholder shown at the drop target */
+.icon-board-tile-ghost .icon-board-tile {
+  outline: 2px dashed var(--interactive-accent);
+  outline-offset: 2px;
+  background: transparent !important;
+}
+
+.icon-board-tile-ghost .icon-board-tile-icon,
+.icon-board-tile-ghost .icon-board-tile-board-indicator {
+  display: none;
+}
+
+/* ── Tile modal ─────────────────────────────────────────────── */
+.icon-board-tile-modal .icon-board-modal-icon-preview {
+  width: 48px;
+  height: 48px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  margin-right: 10px;
+}
+
+.icon-board-tile-modal .icon-board-modal-icon-el {
+  width: 60%;
+  height: 60%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.icon-board-tile-modal .icon-board-modal-icon-el svg {
+  width: 100%;
+  height: 100%;
+}
+
+.icon-board-tile-modal .icon-board-modal-emoji {
+  font-size: 22px;
+  line-height: 1;
+  width: auto;
+  height: auto;
+}
+
+.icon-board-modal-palette {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.icon-board-modal-swatch {
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: transform 100ms ease, box-shadow 100ms ease;
+  box-shadow: inset 0 0 0 1px rgba(0,0,0,0.08);
+}
+
+.icon-board-modal-swatch.has-border {
+  box-shadow: inset 0 0 0 1px rgba(0,0,0,0.2);
+}
+
+.icon-board-modal-swatch:hover {
+  transform: scale(1.15);
+}
+
+.icon-board-modal-swatch.is-selected {
+  box-shadow: 0 0 0 3px var(--interactive-accent);
+}
+
+.icon-board-modal-hex-input {
+  width: 90px;
+  font-family: var(--font-monospace);
+  font-size: 13px;
+  padding: 4px 8px;
+  border-radius: 4px;
+  border: 1px solid var(--background-modifier-border);
+  background: var(--background-primary);
+  color: var(--text-normal);
+}
+
+.icon-board-modal-path-display {
+  font-size: 13px;
+  color: var(--text-normal);
+  margin-right: 10px;
+  word-break: break-all;
+}
+
+.icon-board-modal-path-display.is-empty {
+  color: var(--text-faint);
+  font-style: italic;
+}
+
+.icon-board-modal-buttons {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 20px;
+  padding-top: 16px;
+  border-top: 1px solid var(--background-modifier-border);
+}
+
+/* ── Icon picker modal ──────────────────────────────────────── */
+.icon-board-icon-picker-modal {
+  width: min(560px, 92vw);
+}
+
+.icon-board-icon-picker-modal .modal-content {
+  padding: 20px;
+}
+
+.icon-picker-toggle-row {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 14px;
+}
+
+.icon-picker-toggle-btn {
+  padding: 4px 14px;
+  border-radius: 6px;
+  border: 1px solid var(--background-modifier-border);
+  background: var(--background-secondary);
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 13px;
+}
+
+.icon-picker-toggle-btn.is-active {
+  background: var(--interactive-accent);
+  color: var(--text-on-accent);
+  border-color: var(--interactive-accent);
+}
+
+.icon-picker-search {
+  width: 100%;
+  padding: 8px 12px;
+  border-radius: 6px;
+  border: 1px solid var(--background-modifier-border);
+  background: var(--background-primary);
+  color: var(--text-normal);
+  font-size: 14px;
+  margin-bottom: 12px;
+  box-sizing: border-box;
+}
+
+.icon-picker-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(36px, 1fr));
+  gap: 4px;
+  max-height: 340px;
+  overflow-y: auto;
+  padding: 4px;
+}
+
+.icon-picker-item {
+  width: 36px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 6px;
+  cursor: pointer;
+  color: var(--text-normal);
+  transition: background 80ms ease;
+}
+
+.icon-picker-item:hover {
+  background: var(--background-modifier-hover);
+  color: var(--interactive-accent);
+}
+
+.icon-picker-item svg {
+  width: 18px;
+  height: 18px;
+}
+
+.icon-picker-emoji-input {
+  width: 100%;
+  font-size: 32px;
+  text-align: center;
+  padding: 12px;
+  border-radius: 8px;
+  border: 1px solid var(--background-modifier-border);
+  background: var(--background-primary);
+  color: var(--text-normal);
+  box-sizing: border-box;
+}
+
+.icon-picker-hint {
+  color: var(--text-muted);
+  font-size: 13px;
+  margin-bottom: 10px;
+}
+
+.icon-picker-empty {
+  color: var(--text-faint);
+  font-size: 13px;
+  padding: 16px;
+  text-align: center;
+}
+
+/* ── Settings tab ───────────────────────────────────────────── */
+.icon-board-settings-section {
+  margin-top: 24px;
+  margin-bottom: 4px;
+  font-size: 13px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+}
+
+.icon-board-settings-import-area {
+  width: 100%;
+  min-height: 120px;
+  font-family: var(--font-monospace);
+  font-size: 12px;
+  padding: 10px;
+  border-radius: 6px;
+  border: 1px solid var(--background-modifier-border);
+  background: var(--background-secondary);
+  color: var(--text-normal);
+  resize: vertical;
+  box-sizing: border-box;
+  margin-bottom: 8px;
+  display: block;
+}
+
+/* ── Empty state ────────────────────────────────────────────── */
+.icon-board-empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  padding: 40px;
+  text-align: center;
+  color: var(--text-muted);
+}
+
+.icon-board-empty-hint {
+  font-size: 13px;
+  color: var(--text-faint);
+  max-width: 320px;
+}
+
+/* ── Freeform stub ──────────────────────────────────────────── */
+.icon-board-freeform-stub {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  padding: 40px;
+  text-align: center;
+  color: var(--text-muted);
+  gap: 12px;
+}
+
+.icon-board-freeform-stub-icon {
+  font-size: 48px;
+  line-height: 1;
+}
+
+.icon-board-freeform-stub-path {
+  font-size: 12px;
+  font-family: var(--font-monospace);
+  color: var(--text-faint);
+}
+
+/* ── Create board modal ─────────────────────────────────────── */
+.icon-board-create-modal {
+  width: min(560px, 92vw);
+}
+
+.icon-board-create-hint {
+  color: var(--text-muted);
+  font-size: 13px;
+  margin-bottom: 16px;
+}
+
+.icon-board-layout-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin-bottom: 20px;
+}
+
+.icon-board-layout-card {
+  border: 2px solid var(--background-modifier-border);
+  border-radius: 10px;
+  padding: 14px;
+  cursor: pointer;
+  transition: border-color 100ms ease, background 100ms ease;
+  background: var(--background-secondary);
+}
+
+.icon-board-layout-card:hover {
+  border-color: var(--interactive-accent);
+}
+
+.icon-board-layout-card.is-selected {
+  border-color: var(--interactive-accent);
+  background: var(--background-modifier-hover);
+}
+
+.icon-board-layout-card-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.icon-board-layout-card-icon {
+  font-size: 20px;
+}
+
+.icon-board-layout-card-desc {
+  font-size: 12px;
+  color: var(--text-muted);
+  margin: 0;
+  line-height: 1.4;
+}
+
+/* ── Mobile sizing ──────────────────────────────────────────── */
+@media (max-width: 600px) {
+  .icon-board-tile {
+    width: 88px;
+    height: 88px;
+    border-radius: 18px;
+  }
+
+  .icon-board-add-tile {
+    width: 88px;
+    height: 88px;
+    border-radius: 18px;
+  }
+
+  .icon-board-tile-emoji {
+    font-size: 30px;
+  }
+
+  .icon-board-grid {
+    gap: 24px 16px;
+    padding: 24px 16px;
+  }
+
+  .icon-board-breadcrumb {
+    padding: 12px 16px 0;
+  }
+}

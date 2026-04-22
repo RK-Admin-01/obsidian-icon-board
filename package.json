@@ -1,0 +1,25 @@
+{
+  "name": "icon-board",
+  "version": "1.0.0",
+  "description": "Milanote-style icon board for Obsidian",
+  "main": "main.js",
+  "scripts": {
+    "dev": "node esbuild.config.mjs",
+    "build": "node esbuild.config.mjs production"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "MIT",
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "@types/sortablejs": "^1.15.9",
+    "builtin-modules": "^4.0.0",
+    "esbuild": "^0.21.5",
+    "obsidian": "latest",
+    "tslib": "^2.6.3",
+    "typescript": "^5.5.3"
+  },
+  "dependencies": {
+    "sortablejs": "^1.15.7"
+  }
+}
