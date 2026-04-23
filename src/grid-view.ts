@@ -41,7 +41,7 @@ export class GridRenderer {
         this.board.cards.push(newTile);
         await this.save();
         this.render();
-      }).open();
+      }, this.file).open();
     });
 
     // Drag to rearrange
@@ -130,7 +130,7 @@ export class GridRenderer {
             if (idx !== -1) this.board.cards[idx] = updated;
             await this.save();
             this.render();
-          }).open();
+          }, this.file).open();
         })
       );
       menu.addSeparator();

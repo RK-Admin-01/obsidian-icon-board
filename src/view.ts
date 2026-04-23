@@ -104,7 +104,9 @@ export class IconBoardView extends FileView {
         (path) => this.navigateToBoard(path),
         async (updated) => { await writeBoardFile(this.app, file, updated); },
         this.plugin.settings.attachmentFolder ?? 'attachments/icon-board',
-        this.plugin.settings.bookmarkCacheDays ?? 30
+        this.plugin.settings.bookmarkCacheDays ?? 30,
+        this.plugin.settings.defaultStickyColor,
+        this.plugin.settings.toolbarPosition ?? 'left'
       );
     } else {
       this.renderer = new GridRenderer(

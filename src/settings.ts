@@ -84,6 +84,22 @@ export class IconBoardSettingsTab extends PluginSettingTab {
     containerEl.createEl('h3', { text: 'Freeform canvas', cls: 'icon-board-settings-section' });
 
     new Setting(containerEl)
+      .setName('Toolbar position')
+      .setDesc('Where the card-creation toolbar appears on the canvas. Takes effect when you next open a board.')
+      .addDropdown(dd =>
+        dd
+          .addOption('left',   'Left')
+          .addOption('right',  'Right')
+          .addOption('top',    'Top')
+          .addOption('bottom', 'Bottom')
+          .setValue(this.plugin.settings.toolbarPosition ?? 'left')
+          .onChange(async (value) => {
+            this.plugin.settings.toolbarPosition = value as 'left' | 'right' | 'top' | 'bottom';
+            await this.plugin.saveSettings();
+          })
+      );
+
+    new Setting(containerEl)
       .setName('Attachment folder')
       .setDesc('Vault path where pasted and dragged images are saved. Default: attachments/icon-board')
       .addText(text =>
@@ -112,6 +128,36 @@ export class IconBoardSettingsTab extends PluginSettingTab {
         text.inputEl.min = '1';
         text.inputEl.style.width = '70px';
       });
+
+    const stickyColorSetting = new Setting(containerEl)
+      .setName('Default sticky colour')
+      .setDesc('Colour used when creating new sticky notes.');
+
+    const stickyPalette = stickyColorSetting.controlEl.createDiv('icon-board-settings-sticky-palette');
+    const STICKY_SWATCHES = [
+      { color: '#FDE68A', name: 'Yellow' },
+      { color: '#FCA5A5', name: 'Rose' },
+      { color: '#86EFAC', name: 'Green' },
+      { color: '#93C5FD', name: 'Blue' },
+      { color: '#C4B5FD', name: 'Purple' },
+      { color: '#FBB6CE', name: 'Pink' },
+      { color: '#FCD34D', name: 'Amber' },
+      { color: '#A7F3D0', name: 'Mint' },
+      { color: '#D1D5DB', name: 'Grey' },
+      { color: '#F3F4F6', name: 'Light Grey' },
+    ];
+    const currentColor = this.plugin.settings.defaultStickyColor ?? '#FDE68A';
+    for (const { color } of STICKY_SWATCHES) {
+      const sw = stickyPalette.createDiv('icon-board-modal-swatch');
+      sw.style.backgroundColor = color;
+      if (color === currentColor) sw.addClass('is-selected');
+      sw.addEventListener('click', async () => {
+        stickyPalette.querySelectorAll<HTMLElement>('.icon-board-modal-swatch').forEach(s => s.removeClass('is-selected'));
+        sw.addClass('is-selected');
+        this.plugin.settings.defaultStickyColor = color;
+        await this.plugin.saveSettings();
+      });
+    }
 
     // ── Export ───────────────────────────────────────────────
     containerEl.createEl('h3', { text: 'Data', cls: 'icon-board-settings-section' });

@@ -3,6 +3,7 @@
 export interface IconBoardFile {
   version: 2 | 3;
   layout: 'grid' | 'freeform';
+  dotsHidden?: boolean;
   viewport?: { x: number; y: number; zoom: number }; // freeform only
   cards: Card[];
   connections: Connection[];  // empty for grid; freeform only
@@ -53,18 +54,30 @@ export type TileTarget =
   | { kind: 'kanban';  path: string }
   | { kind: 'board';   path: string }; // .iboard file
 
-// ── Other card types (rendered in Phases I–K) ────────────────
+// ── Other card types ──────────────────────────────────────────
 
 export interface StickyCard extends BaseCard {
   kind: 'sticky';
   text: string;
   color: string;
+  textScale?: 'sm' | 'md' | 'lg';
+  textColor?: string;
+  textAlign?: 'left' | 'center' | 'right' | 'justify';
+}
+
+export interface ChecklistItem {
+  id: string;
+  text: string;
+  done: boolean;
+  isHeader?: boolean;   // bold section label; checkbox tracks children
+  parentId?: string;    // one level of nesting only
 }
 
 export interface ChecklistCard extends BaseCard {
   kind: 'checklist';
   title?: string;
-  items: { id: string; text: string; done: boolean }[];
+  accentColor: string;  // hex; top accent bar colour
+  items: ChecklistItem[];
   color: string;
 }
 
@@ -74,6 +87,15 @@ export interface ImageCard extends BaseCard {
     | { type: 'vault'; path: string }
     | { type: 'external'; url: string };
   caption?: string;
+  captionHidden?: boolean;
+  captionColor?: string;
+  captionScale?: 'sm' | 'md' | 'lg';
+}
+
+export interface AudioCard extends BaseCard {
+  kind: 'audio';
+  source: { type: 'vault'; path: string };
+  title?: string;
 }
 
 export interface NoteLinkCard extends BaseCard {
@@ -100,6 +122,7 @@ export interface KanbanItem {
   linkedNotePath?: string;
   tags?: string[];
   imagePath?: string;
+  audioPath?: string;
 }
 
 export interface KanbanColumnCard extends BaseCard {
@@ -112,4 +135,4 @@ export interface KanbanColumnCard extends BaseCard {
 
 export type Card =
   | TileCard | StickyCard | ChecklistCard
-  | ImageCard | NoteLinkCard | BookmarkCard | KanbanColumnCard;
+  | ImageCard | AudioCard | NoteLinkCard | BookmarkCard | KanbanColumnCard;

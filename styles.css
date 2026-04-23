@@ -2,6 +2,20 @@
    Icon Board — styles
    ============================================================ */
 
+/* ── Elevation shadow system ─────────────────────────────────── */
+
+body {
+  --ib-shadow-low:  0 1px 3px rgba(0,0,0,0.08), 0 1px 6px rgba(0,0,0,0.06);
+  --ib-shadow-mid:  0 3px 10px rgba(0,0,0,0.10), 0 1px 4px rgba(0,0,0,0.08);
+  --ib-shadow-high: 0 8px 28px rgba(0,0,0,0.14), 0 2px 8px rgba(0,0,0,0.10);
+}
+
+body.theme-dark {
+  --ib-shadow-low:  0 1px 3px rgba(0,0,0,0.28), 0 1px 6px rgba(0,0,0,0.18);
+  --ib-shadow-mid:  0 3px 10px rgba(0,0,0,0.35), 0 1px 4px rgba(0,0,0,0.22);
+  --ib-shadow-high: 0 8px 28px rgba(0,0,0,0.45), 0 2px 8px rgba(0,0,0,0.30);
+}
+
 /* Container */
 .icon-board-container {
   display: flex;
@@ -31,7 +45,7 @@
   justify-content: center;
   width: 28px;
   height: 28px;
-  border-radius: 6px;
+  border-radius: 2px;
   cursor: pointer;
   color: var(--text-muted);
   flex-shrink: 0;
@@ -69,7 +83,7 @@
   color: var(--text-muted);
   cursor: pointer;
   padding: 2px 4px;
-  border-radius: 4px;
+  border-radius: 1px;
   transition: color 80ms ease;
 }
 
@@ -105,12 +119,12 @@
   gap: 8px;
   cursor: pointer;
   outline: none;
-  border-radius: 4px;
+  border-radius: 1px;
 }
 
 /* Keyboard focus ring — appears around the tile square */
 .icon-board-tile-wrapper:focus-visible .icon-board-tile {
-  box-shadow: 0 0 0 3px var(--interactive-accent), 0 8px 24px rgba(0, 0, 0, 0.15);
+  box-shadow: 0 0 0 3px var(--interactive-accent), var(--ib-shadow-mid);
   transform: scale(1.04);
 }
 
@@ -118,7 +132,7 @@
 .icon-board-tile {
   width: 112px;
   height: 112px;
-  border-radius: 22px;
+  border-radius: 6px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -129,7 +143,7 @@
 
 .icon-board-tile-wrapper:hover .icon-board-tile {
   transform: scale(1.04);
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
+  box-shadow: var(--ib-shadow-mid);
 }
 
 /* Small chevron in the bottom-right of board tiles */
@@ -210,11 +224,15 @@
   /* Dot grid background — values updated dynamically via JS */
   background-image: radial-gradient(
     circle,
-    var(--background-modifier-border) 1.5px,
-    transparent 1.5px
+    var(--background-modifier-border) 1px,
+    transparent 1px
   );
-  background-size: 32px 32px;
+  background-size: 20px 20px;
   outline: none;
+}
+
+.icon-board-canvas-outer.no-dots {
+  background-image: none;
 }
 
 .icon-board-canvas-inner {
@@ -233,7 +251,7 @@
   flex-direction: column;
   cursor: grab;
   box-sizing: border-box;
-  border-radius: 12px;
+  border-radius: 3px;
   transition: box-shadow 120ms ease;
 }
 
@@ -250,7 +268,7 @@
 }
 
 .icon-board-freeform-card.is-selected {
-  box-shadow: 0 0 0 2px var(--interactive-accent), 0 4px 16px rgba(0,0,0,0.12);
+  box-shadow: 0 0 0 2px var(--interactive-accent), var(--ib-shadow-mid);
 }
 
 /* Tile square inside freeform card */
@@ -271,7 +289,7 @@
   width: 12px;
   height: 12px;
   background: var(--interactive-accent);
-  border-radius: 3px;
+  border-radius: 1px;
   cursor: se-resize;
   opacity: 0;
   transition: opacity 100ms ease;
@@ -288,63 +306,93 @@
   pointer-events: none;
   border: 2px solid var(--interactive-accent);
   background: color-mix(in srgb, var(--interactive-accent) 10%, transparent);
-  border-radius: 4px;
+  border-radius: 1px;
   z-index: 9999;
 }
 
-/* ── Freeform toolbar ───────────────────────────────────────── */
+/* ── Freeform toolbar (vertical panel) ──────────────────────── */
 
 .icon-board-freeform-toolbar {
   position: absolute;
-  bottom: 24px;
-  left: 50%;
-  transform: translateX(-50%);
   display: flex;
-  gap: 4px;
+  align-items: center;
+  gap: 2px;
   background: var(--background-secondary);
   border: 1px solid var(--background-modifier-border);
   border-radius: 14px;
-  padding: 8px 12px;
-  box-shadow: 0 4px 20px rgba(0,0,0,0.12);
+  box-shadow: var(--ib-shadow-mid);
   z-index: 100;
 }
 
-/* Wrapper around the 6 action buttons */
-.icon-board-freeform-toolbar-btns {
-  display: flex;
-  gap: 4px;
+/* Left (default) */
+.icon-board-freeform-toolbar.tb-pos-left {
+  flex-direction: column;
+  width: 72px;
+  padding: 10px 8px;
+  left: 24px;
+  top: 50%;
+  transform: translateY(-50%);
 }
 
-.icon-board-freeform-toolbar-btn {
+/* Right */
+.icon-board-freeform-toolbar.tb-pos-right {
+  flex-direction: column;
+  width: 72px;
+  padding: 10px 8px;
+  right: 24px;
+  top: 50%;
+  transform: translateY(-50%);
+}
+
+/* Top */
+.icon-board-freeform-toolbar.tb-pos-top {
+  flex-direction: row;
+  height: 72px;
+  padding: 8px 10px;
+  top: 24px;
+  left: 50%;
+  transform: translateX(-50%);
+}
+
+/* Bottom */
+.icon-board-freeform-toolbar.tb-pos-bottom {
+  flex-direction: row;
+  height: 72px;
+  padding: 8px 10px;
+  bottom: 24px;
+  left: 50%;
+  transform: translateX(-50%);
+}
+
+/* Primary toolbar button */
+.icon-board-tb-btn {
   display: flex;
   flex-direction: column;
   align-items: center;
+  justify-content: center;
   gap: 4px;
-  padding: 8px 12px;
+  width: 56px;
+  height: 52px;
   border-radius: 10px;
   cursor: pointer;
   color: var(--text-muted);
   transition: background 80ms ease, color 80ms ease;
-  min-width: 56px;
+  flex-shrink: 0;
 }
 
-.icon-board-freeform-toolbar-btn:hover,
-.icon-board-freeform-toolbar-btn:focus-visible {
+.icon-board-tb-btn:hover,
+.icon-board-tb-btn:focus-visible {
   background: var(--background-modifier-hover);
-  color: var(--interactive-accent);
+  color: var(--text-normal);
   outline: none;
 }
 
-.icon-board-freeform-toolbar-btn.is-active {
-  background: var(--background-modifier-hover);
+.icon-board-tb-btn.is-active {
+  background: var(--background-modifier-active-hover);
   color: var(--interactive-accent);
 }
 
-.icon-board-freeform-toolbar-btn.is-active .icon-board-freeform-toolbar-btn-icon {
-  color: var(--interactive-accent);
-}
-
-.icon-board-freeform-toolbar-btn-icon {
+.icon-board-tb-btn-icon {
   display: flex;
   align-items: center;
   justify-content: center;
@@ -352,16 +400,103 @@
   height: 22px;
 }
 
-.icon-board-freeform-toolbar-btn-icon svg {
+.icon-board-tb-btn-icon svg {
   width: 20px;
   height: 20px;
 }
 
-.icon-board-freeform-toolbar-btn-label {
-  font-size: 11px;
+.icon-board-tb-btn-label {
+  font-size: 10px;
   font-weight: 500;
   line-height: 1;
   text-align: center;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 52px;
+}
+
+/* ··· overflow separator */
+.icon-board-tb-overflow-sep {
+  background: var(--background-modifier-border);
+  flex-shrink: 0;
+}
+
+/* vertical toolbars: separator is a horizontal line */
+.tb-pos-left .icon-board-tb-overflow-sep,
+.tb-pos-right .icon-board-tb-overflow-sep {
+  width: 40px;
+  height: 1px;
+  margin: 4px 0;
+}
+
+/* horizontal toolbars: separator is a vertical line */
+.tb-pos-top .icon-board-tb-overflow-sep,
+.tb-pos-bottom .icon-board-tb-overflow-sep {
+  width: 1px;
+  height: 40px;
+  margin: 0 4px;
+}
+
+/* ··· overflow trigger button — inherits .icon-board-tb-btn */
+.icon-board-tb-overflow-btn {
+  font-size: 18px;
+  font-weight: 700;
+  letter-spacing: 2px;
+  line-height: 1;
+  color: var(--text-muted);
+  user-select: none;
+}
+
+/* ── Overflow popover ────────────────────────────────────────── */
+
+.icon-board-tb-overflow {
+  position: absolute;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  background: var(--background-secondary);
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 10px;
+  padding: 6px;
+  box-shadow: var(--ib-shadow-high);
+  z-index: 200;
+  min-width: 160px;
+}
+
+.icon-board-tb-overflow-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 10px;
+  border-radius: 7px;
+  cursor: pointer;
+  color: var(--text-normal);
+  font-size: 13px;
+  transition: background 80ms ease;
+  white-space: nowrap;
+}
+
+.icon-board-tb-overflow-item:hover {
+  background: var(--background-modifier-hover);
+}
+
+.icon-board-tb-overflow-item.is-active {
+  color: var(--interactive-accent);
+}
+
+.icon-board-tb-overflow-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+}
+
+.icon-board-tb-overflow-icon svg {
+  width: 16px;
+  height: 16px;
 }
 
 /* ── Toolbar FAB (narrow / mobile screens) ──────────────────── */
@@ -377,7 +512,7 @@
   justify-content: center;
   cursor: pointer;
   flex-shrink: 0;
-  box-shadow: 0 4px 16px rgba(0,0,0,0.2);
+  box-shadow: var(--ib-shadow-mid);
   transition: transform 100ms ease;
 }
 
@@ -386,46 +521,41 @@
 
 @media (max-width: 540px) {
   .icon-board-freeform-toolbar {
-    left: auto;
-    right: 24px;
-    transform: none;
-    flex-direction: column-reverse;
-    align-items: flex-end;
-    background: transparent;
-    border: none;
-    box-shadow: none;
-    padding: 0;
+    left: 0 !important;
+    right: 0 !important;
+    bottom: 0 !important;
+    top: auto !important;
+    transform: none !important;
+    flex-direction: row;
+    justify-content: center;
+    width: auto !important;
+    height: 64px !important;
     border-radius: 0;
-    gap: 8px;
+    border-left: none;
+    border-right: none;
+    border-bottom: none;
+    padding: 6px 8px;
+    gap: 2px;
+    overflow-x: auto;
+  }
+
+  .icon-board-tb-overflow-sep {
+    width: 1px !important;
+    height: 32px !important;
+    margin: 0 4px !important;
+  }
+
+  .icon-board-tb-btn {
+    width: 48px;
+    height: 48px;
+  }
+
+  .icon-board-tb-btn-label {
+    display: none;
   }
 
   .icon-board-freeform-toolbar-fab {
-    display: flex;
-  }
-
-  .icon-board-freeform-toolbar-btns {
     display: none;
-    flex-direction: column;
-    gap: 2px;
-    background: var(--background-secondary);
-    border: 1px solid var(--background-modifier-border);
-    border-radius: 12px;
-    padding: 6px 8px;
-    box-shadow: 0 4px 20px rgba(0,0,0,0.12);
-    min-width: 160px;
-  }
-
-  .icon-board-freeform-toolbar.is-open .icon-board-freeform-toolbar-btns {
-    display: flex;
-  }
-
-  .icon-board-freeform-toolbar-btn {
-    flex-direction: row;
-    justify-content: flex-start;
-    min-width: 0;
-    padding: 8px 10px;
-    border-radius: 8px;
-    gap: 8px;
   }
 }
 
@@ -433,7 +563,7 @@
 
 .icon-board-conn-props {
   position: absolute;
-  bottom: 104px;
+  bottom: 24px;
   left: 50%;
   transform: translateX(-50%);
   display: flex;
@@ -441,9 +571,9 @@
   gap: 2px;
   background: var(--background-secondary);
   border: 1px solid var(--background-modifier-border);
-  border-radius: 12px;
+  border-radius: 3px;
   padding: 6px 10px;
-  box-shadow: 0 4px 20px rgba(0,0,0,0.12);
+  box-shadow: var(--ib-shadow-mid);
   z-index: 101;
   white-space: nowrap;
   max-width: calc(100vw - 40px);
@@ -489,7 +619,7 @@
   justify-content: center;
   width: 28px;
   height: 28px;
-  border-radius: 6px;
+  border-radius: 2px;
   cursor: pointer;
   color: var(--text-muted);
   flex-shrink: 0;
@@ -528,7 +658,7 @@
 .icon-board-conn-props-label-input {
   width: 100%;
   padding: 4px 8px;
-  border-radius: 4px;
+  border-radius: 1px;
   border: 1px solid var(--background-modifier-border);
   background: var(--background-secondary);
   color: var(--text-normal);
@@ -549,14 +679,14 @@
   right: 24px;
   background: var(--background-secondary);
   border: 1px solid var(--background-modifier-border);
-  border-radius: 8px;
+  border-radius: 2px;
   padding: 6px 12px;
   font-size: 12px;
   font-weight: 600;
   color: var(--text-muted);
   cursor: pointer;
   z-index: 100;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+  box-shadow: var(--ib-shadow-low);
   transition: color 80ms ease, border-color 80ms ease;
   user-select: none;
 }
@@ -566,15 +696,79 @@
   border-color: var(--interactive-accent);
 }
 
+/* ── Alignment bar ───────────────────────────────────────────── */
+
+.icon-board-align-bar {
+  position: absolute;
+  bottom: 24px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: none;
+  align-items: center;
+  gap: 6px;
+  background: var(--background-secondary);
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 4px;
+  padding: 4px 8px;
+  z-index: 100;
+  box-shadow: var(--ib-shadow-low);
+  white-space: nowrap;
+}
+
+.icon-board-align-bar.is-visible { display: flex; }
+
+.icon-board-align-bar-group {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.icon-board-align-bar-label {
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--text-faint);
+  padding: 0 2px;
+  letter-spacing: 0.03em;
+  user-select: none;
+}
+
+.icon-board-align-bar-sep {
+  width: 1px;
+  height: 18px;
+  background: var(--background-modifier-border);
+  flex-shrink: 0;
+}
+
+.icon-board-align-bar-btn {
+  width: 26px;
+  height: 26px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 2px;
+  cursor: pointer;
+  color: var(--text-muted);
+  transition: background 80ms, color 80ms;
+}
+
+.icon-board-align-bar-btn svg { width: 14px; height: 14px; }
+
+.icon-board-align-bar-btn--rotate svg { transform: rotate(90deg); }
+
+.icon-board-align-bar-btn:hover {
+  background: var(--background-modifier-hover);
+  color: var(--text-normal);
+}
+
 /* ── Kanban column card ──────────────────────────────────────── */
 
 .icon-board-freeform-kanban-card {
   flex-direction: column;
   align-items: stretch;
   justify-content: flex-start;
-  border-radius: 12px;
+  border-radius: 3px;
   border: 1px solid var(--background-modifier-border);
-  box-shadow: 0 2px 12px rgba(0,0,0,0.08);
+  box-shadow: var(--ib-shadow-low);
   background: var(--background-secondary);
   overflow: hidden;
   gap: 0;
@@ -643,7 +837,7 @@
 .icon-board-kanban-item {
   background: var(--background-primary);
   border: 1px solid var(--background-modifier-border);
-  border-radius: 6px;
+  border-radius: 2px;
   padding: 6px 8px;
   font-size: 13px;
   color: var(--text-normal);
@@ -725,7 +919,7 @@
   align-items: center;
   gap: 3px;
   background: var(--background-modifier-hover);
-  border-radius: 10px;
+  border-radius: 3px;
   padding: 1px 7px 1px 5px;
   font-size: 11px;
   color: var(--text-muted);
@@ -753,13 +947,13 @@
   align-items: center;
   background: color-mix(in srgb, var(--interactive-accent) 12%, transparent);
   color: var(--interactive-accent);
-  border-radius: 10px;
+  border-radius: 3px;
   padding: 1px 7px;
   font-size: 11px;
 }
 
 .icon-board-kanban-item-image {
-  border-radius: 4px;
+  border-radius: 1px;
   overflow: hidden;
   margin-top: 2px;
 }
@@ -768,14 +962,21 @@
   width: 100%;
   height: auto;
   display: block;
-  border-radius: 4px;
+  border-radius: 1px;
   pointer-events: none;
+}
+
+.icon-board-kanban-item-audio { margin-top: 4px; }
+
+.icon-board-kanban-audio-player {
+  width: 100%;
+  height: 32px;
 }
 
 .icon-board-kanban-items.is-drag-over {
   outline: 2px dashed var(--interactive-accent);
   outline-offset: -2px;
-  border-radius: 4px;
+  border-radius: 1px;
   background: color-mix(in srgb, var(--interactive-accent) 8%, transparent);
 }
 
@@ -833,11 +1034,11 @@
   z-index: 9999;
   background: var(--background-primary);
   border: 1px solid var(--interactive-accent);
-  border-radius: 6px;
+  border-radius: 2px;
   padding: 6px 8px;
   font-size: 13px;
   color: var(--text-normal);
-  box-shadow: 0 4px 16px rgba(0,0,0,0.2);
+  box-shadow: var(--ib-shadow-mid);
   opacity: 0.9;
   word-break: break-word;
   line-height: 1.4;
@@ -944,8 +1145,8 @@
   align-items: stretch;
   justify-content: flex-start;
   padding: 12px;
-  border-radius: 12px;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.10);
+  border-radius: 3px;
+  box-shadow: var(--ib-shadow-low);
   gap: 0;
   overflow: hidden;
 }
@@ -963,36 +1164,267 @@
 
 .icon-board-sticky-text p { margin: 0 0 4px; }
 .icon-board-sticky-text p:last-child { margin-bottom: 0; }
+.icon-board-sticky-text strong { font-weight: 700; }
+.icon-board-sticky-text em { font-style: italic; }
+.icon-board-sticky-text del { text-decoration: line-through; }
 
 .icon-board-sticky-editor {
   flex: 1;
   width: 100%;
   min-height: 0;
-  /* inherit the sticky card's background color so it stays solid during editing */
-  background: transparent !important;
-  background-color: transparent !important;
-  border: none !important;
+  background: transparent;
+  border: none;
   outline: none;
-  box-shadow: none !important;
-  resize: none;
   font-size: 14px;
   line-height: 1.5;
   font-family: var(--font-text);
   color: rgba(0,0,0,0.75);
   padding: 0;
-  box-sizing: border-box;
+  word-break: break-word;
+  overflow-y: auto;
+  cursor: text;
 }
+
+.icon-board-sticky-editor:empty::before {
+  content: 'Start typing…';
+  color: rgba(0,0,0,0.35);
+  font-style: italic;
+  pointer-events: none;
+}
+
+/* ── Format bars (used by image caption editor) ─────────────── */
+
+.icon-board-caption-format-bar {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 3px 4px;
+  background: rgba(0,0,0,0.08);
+  border-radius: 3px;
+  margin-bottom: 4px;
+  flex-shrink: 0;
+}
+
+.icon-board-caption-format-bar {
+  margin-bottom: 0;
+  border-radius: 3px 3px 0 0;
+}
+
+.icon-board-format-btn {
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: 700;
+  border-radius: 2px;
+  cursor: pointer;
+  background: transparent;
+  border: none;
+  color: rgba(0,0,0,0.6);
+  font-family: var(--font-text);
+  transition: background 80ms;
+  padding: 0;
+}
+
+/* B/I/S visual styles — applied by position within the bar */
+.icon-board-format-btn:nth-child(2) { font-style: italic; font-weight: 400; }
+.icon-board-format-btn:nth-child(3) { text-decoration: line-through; font-weight: 400; }
+
+.icon-board-format-btn:hover { background: rgba(0,0,0,0.12); color: rgba(0,0,0,0.85); }
+.icon-board-format-btn.is-active { background: rgba(0,0,0,0.15); color: rgba(0,0,0,0.9); }
+
+.icon-board-format-sep {
+  width: 1px;
+  height: 16px;
+  background: rgba(0,0,0,0.18);
+  margin: 0 3px;
+  flex-shrink: 0;
+}
+
+.icon-board-align-btn {
+  font-family: var(--font-monospace);
+  font-size: 10px;
+  font-weight: 400;
+  text-decoration: none !important;
+  font-style: normal !important;
+}
+
+.icon-board-format-color {
+  width: 22px;
+  height: 22px;
+  border: none;
+  border-radius: 50%;
+  cursor: pointer;
+  background: none;
+  padding: 0;
+  flex-shrink: 0;
+}
+
+/* ── Text formatting toolbar (floating selection popover) ─────── */
+
+.icon-board-text-fmt-toolbar {
+  position: absolute;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px 10px;
+  background: var(--background-primary);
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 10px;
+  box-shadow: var(--ib-shadow-high);
+  z-index: 300;
+  user-select: none;
+}
+
+.icon-board-text-fmt-divider {
+  height: 1px;
+  background: var(--background-modifier-border);
+  margin: 0 -2px;
+}
+
+.icon-board-text-fmt-inline-row {
+  display: flex;
+  flex-direction: row;
+  gap: 2px;
+}
+
+.icon-board-text-fmt-inline-btn {
+  flex: 1;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 5px;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 700;
+  font-family: var(--font-text);
+  color: var(--text-muted);
+  background: var(--background-modifier-hover);
+  transition: background 80ms, color 80ms;
+  user-select: none;
+}
+
+.icon-board-text-fmt-inline-btn:hover {
+  background: var(--interactive-accent);
+  color: var(--text-on-accent);
+}
+
+.icon-board-text-fmt-inline-btn:nth-child(2) { font-style: italic; font-weight: 400; }
+.icon-board-text-fmt-inline-btn:nth-child(3) { text-decoration: line-through; font-weight: 400; }
+
+.icon-board-text-fmt-section {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.icon-board-text-fmt-label {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.icon-board-text-fmt-swatches {
+  display: flex;
+  flex-direction: row;
+  gap: 4px;
+  align-items: center;
+}
+
+.icon-board-text-fmt-swatch {
+  width: 26px;
+  height: 26px;
+  border-radius: 4px;
+  cursor: pointer;
+  border: 1.5px solid var(--background-modifier-border);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: border-color 80ms;
+  position: relative;
+  overflow: hidden;
+}
+
+.icon-board-text-fmt-swatch:hover {
+  border-color: var(--interactive-accent);
+}
+
+.icon-board-text-fmt-swatch.is-custom {
+  background: var(--background-secondary);
+  color: var(--text-muted);
+}
+
+.icon-board-text-fmt-swatch.is-custom svg {
+  width: 14px;
+  height: 14px;
+}
+
+.icon-board-text-fmt-swatch.is-default,
+.icon-board-text-fmt-swatch.is-none {
+  background: transparent;
+}
+
+.icon-board-text-fmt-null-label {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-muted);
+  line-height: 1;
+}
+
+.icon-board-text-fmt-black-label {
+  font-size: 11px;
+  font-weight: 700;
+  color: #ffffff;
+  line-height: 1;
+}
+
+.icon-board-text-fmt-custom-input {
+  position: absolute;
+  width: 0;
+  height: 0;
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* ── Text scale utilities ────────────────────────────────────── */
+
+.text-scale-sm { font-size: 11px !important; }
+.text-scale-sm p, .text-scale-sm li { font-size: 11px; }
+
+.text-scale-md { font-size: 14px !important; }
+
+.text-scale-lg { font-size: 18px !important; }
+.text-scale-lg p, .text-scale-lg li { font-size: 18px; }
 
 /* ── Checklist card ─────────────────────────────────────────── */
 
 .icon-board-freeform-checklist-card {
   align-items: stretch;
   justify-content: flex-start;
-  padding: 12px;
-  border-radius: 12px;
+  padding: 0;
+  border-radius: 6px;
   border: 1px solid var(--background-modifier-border);
-  box-shadow: 0 2px 8px rgba(0,0,0,0.07);
+  box-shadow: var(--ib-shadow-low);
   gap: 0;
+  overflow: hidden;
+}
+
+.icon-board-freeform-checklist-card.is-selected {
+  box-shadow: var(--ib-shadow-mid);
+}
+
+/* 4px accent bar at top */
+.icon-board-checklist-accent {
+  width: 100%;
+  height: 4px;
+  flex-shrink: 0;
+  border-radius: 6px 6px 0 0;
 }
 
 .icon-board-checklist-title {
@@ -1000,13 +1432,11 @@
   background: transparent !important;
   border: none !important;
   outline: none;
-  font-size: 14px;
-  font-weight: 600;
+  font-size: 13px;
+  font-weight: 700;
   color: var(--text-normal);
-  padding: 0 0 8px;
+  padding: 10px 12px 6px;
   box-sizing: border-box;
-  border-bottom: 1px solid var(--background-modifier-border);
-  margin-bottom: 6px;
 }
 
 .icon-board-checklist-list {
@@ -1014,7 +1444,7 @@
   overflow-y: auto;
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  padding: 2px 12px;
   min-height: 0;
 }
 
@@ -1022,24 +1452,34 @@
   display: flex;
   align-items: center;
   gap: 6px;
-  padding: 2px 0;
+  padding: 5px 0;
+}
+
+/* Section header rows */
+.icon-board-checklist-item.is-header {
+  margin-top: 8px;
+  margin-bottom: 2px;
+}
+
+/* Child items — 20px indent */
+.icon-board-checklist-item.is-child {
+  padding-left: 20px;
 }
 
 .icon-board-checklist-cb {
-  /* Override Obsidian theme styles that may hide or restyle checkboxes */
   appearance: checkbox !important;
   -webkit-appearance: checkbox !important;
   display: block !important;
   opacity: 1 !important;
   flex-shrink: 0;
-  width: 15px !important;
-  height: 15px !important;
-  min-width: 15px;
+  width: 14px !important;
+  height: 14px !important;
+  min-width: 14px;
   margin: 0;
   padding: 0;
   cursor: pointer;
   accent-color: var(--interactive-accent);
-  border: none;
+  border-radius: 3px;
   background: revert;
 }
 
@@ -1049,28 +1489,86 @@
   border: none !important;
   box-shadow: none !important;
   outline: none;
-  font-size: 13px;
+  font-size: 12px;
   color: var(--text-normal);
   padding: 0;
   min-width: 0;
 }
 
+.icon-board-checklist-item.is-header .icon-board-checklist-item-input {
+  font-size: 12px;
+  font-weight: 700;
+}
+
 .icon-board-checklist-item.is-done .icon-board-checklist-item-input {
   text-decoration: line-through;
-  opacity: 0.5;
+  color: var(--text-muted);
 }
 
 .icon-board-checklist-add {
-  margin-top: 6px;
+  margin: 4px 0 8px;
   font-size: 12px;
-  color: var(--text-muted);
+  color: var(--text-faint);
   cursor: pointer;
-  padding: 2px 0;
+  padding: 3px 0;
   transition: color 80ms ease;
   flex-shrink: 0;
+  opacity: 0;
+}
+
+.icon-board-freeform-checklist-card:hover .icon-board-checklist-add,
+.icon-board-freeform-checklist-card:focus-within .icon-board-checklist-add {
+  opacity: 1;
 }
 
 .icon-board-checklist-add:hover { color: var(--interactive-accent); }
+
+/* ── Accent colour popover ──────────────────────────────────── */
+
+.icon-board-accent-pop {
+  position: absolute;
+  background: var(--background-secondary);
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 10px;
+  padding: 10px;
+  box-shadow: var(--ib-shadow-high);
+  z-index: 200;
+}
+
+.icon-board-accent-pop-palette {
+  display: grid;
+  grid-template-columns: repeat(6, 22px);
+  gap: 5px;
+  margin-bottom: 8px;
+}
+
+.icon-board-accent-pop-swatch {
+  width: 22px;
+  height: 22px;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: transform 80ms ease, box-shadow 80ms ease;
+}
+
+.icon-board-accent-pop-swatch:hover { transform: scale(1.15); }
+.icon-board-accent-pop-swatch.is-selected { box-shadow: 0 0 0 2px var(--interactive-accent); }
+.icon-board-accent-pop-swatch.has-border { box-shadow: inset 0 0 0 1px var(--background-modifier-border); }
+.icon-board-accent-pop-swatch.has-border.is-selected {
+  box-shadow: 0 0 0 2px var(--interactive-accent), inset 0 0 0 1px var(--background-modifier-border);
+}
+
+.icon-board-accent-pop-hex-row { display: flex; gap: 6px; }
+
+.icon-board-accent-pop-hex {
+  width: 100%;
+  font-size: 12px;
+  background: var(--background-primary);
+  border: 1px solid var(--background-modifier-border) !important;
+  border-radius: 4px;
+  padding: 4px 6px;
+  outline: none;
+  color: var(--text-normal);
+}
 
 /* ── NoteLink card ──────────────────────────────────────────── */
 
@@ -1078,9 +1576,9 @@
   align-items: stretch;
   justify-content: flex-start;
   padding: 0;
-  border-radius: 10px;
+  border-radius: 3px;
   border: 1px solid var(--background-modifier-border);
-  box-shadow: 0 2px 8px rgba(0,0,0,0.07);
+  box-shadow: var(--ib-shadow-low);
   gap: 0;
   overflow: hidden;
   background: var(--background-secondary);
@@ -1129,7 +1627,7 @@
   justify-content: center;
   background: none;
   border: none;
-  border-radius: 4px;
+  border-radius: 1px;
   cursor: pointer;
   color: var(--text-muted);
   padding: 0;
@@ -1162,7 +1660,7 @@
   align-items: stretch;
   justify-content: flex-start;
   padding: 0;
-  border-radius: 10px;
+  border-radius: 3px;
   overflow: hidden;
   background: var(--background-secondary);
   border: 1px solid var(--background-modifier-border);
@@ -1204,12 +1702,40 @@
   opacity: 0.4;
 }
 
-.icon-board-image-caption {
+.icon-board-image-caption-wrap {
   flex-shrink: 0;
+  width: 100%;
+  border-top: 1px solid var(--background-modifier-border);
+  display: flex;
+  flex-direction: column;
+}
+
+.icon-board-image-caption-wrap.is-hidden { display: none; }
+
+.icon-board-image-caption-view {
+  font-size: 12px;
+  color: var(--text-muted);
+  padding: 5px 8px;
+  line-height: 1.4;
+  cursor: text;
+  min-height: 24px;
+  word-break: break-word;
+}
+
+.icon-board-image-caption-view p { margin: 0; }
+.icon-board-image-caption-view strong { font-weight: 700; }
+.icon-board-image-caption-view em { font-style: italic; }
+.icon-board-image-caption-view del { text-decoration: line-through; }
+
+.icon-board-caption-placeholder {
+  color: var(--text-faint);
+  font-style: italic;
+}
+
+.icon-board-image-caption {
   width: 100%;
   background: transparent !important;
   border: none !important;
-  border-top: 1px solid var(--background-modifier-border) !important;
   outline: none;
   font-size: 12px;
   color: var(--text-muted);
@@ -1217,9 +1743,73 @@
   box-sizing: border-box;
   font-family: var(--font-text);
   box-shadow: none !important;
+  resize: none;
+  overflow: hidden;
+  min-height: 0;
+  line-height: 1.4;
 }
 
 .icon-board-image-caption::placeholder { color: var(--text-faint); }
+
+/* ── Audio card ─────────────────────────────────────────────── */
+
+.icon-board-freeform-audio-card {
+  flex-direction: column;
+  align-items: stretch;
+  justify-content: flex-start;
+  padding: 0;
+  background: var(--background-secondary);
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 3px;
+  overflow: hidden;
+  gap: 0;
+}
+
+.icon-board-audio-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px 8px;
+}
+
+.icon-board-audio-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: var(--interactive-accent);
+  color: white;
+  flex-shrink: 0;
+}
+
+.icon-board-audio-icon svg {
+  width: 14px;
+  height: 14px;
+}
+
+.icon-board-audio-title {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-normal);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.icon-board-audio-player {
+  width: 100%;
+  padding: 0 10px 10px;
+  box-sizing: border-box;
+}
+
+.icon-board-audio-missing {
+  padding: 8px 12px;
+  font-size: 12px;
+  color: var(--text-faint);
+  font-style: italic;
+}
 
 /* ── Bookmark card ──────────────────────────────────────────── */
 
@@ -1227,9 +1817,9 @@
   align-items: stretch;
   justify-content: flex-start;
   padding: 0;
-  border-radius: 10px;
+  border-radius: 3px;
   border: 1px solid var(--background-modifier-border);
-  box-shadow: 0 2px 8px rgba(0,0,0,0.07);
+  box-shadow: var(--ib-shadow-low);
   overflow: hidden;
   background: var(--background-secondary);
   gap: 0;
@@ -1344,7 +1934,7 @@
 .icon-board-bookmark-retry {
   font-size: 12px;
   padding: 3px 10px;
-  border-radius: 6px;
+  border-radius: 2px;
   border: 1px solid var(--background-modifier-border);
   background: var(--background-primary);
   color: var(--text-muted);
@@ -1362,7 +1952,7 @@
 .icon-board-add-tile {
   width: 112px;
   height: 112px;
-  border-radius: 22px;
+  border-radius: 6px;
   border: 2px dashed var(--text-muted);
   display: flex;
   align-items: center;
@@ -1417,7 +2007,7 @@
 .icon-board-tile-modal .icon-board-modal-icon-preview {
   width: 48px;
   height: 48px;
-  border-radius: 10px;
+  border-radius: 3px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1445,7 +2035,8 @@
   height: auto;
 }
 
-.icon-board-modal-palette {
+.icon-board-modal-palette,
+.icon-board-settings-sticky-palette {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
@@ -1455,7 +2046,7 @@
 .icon-board-modal-swatch {
   width: 28px;
   height: 28px;
-  border-radius: 6px;
+  border-radius: 2px;
   cursor: pointer;
   transition: transform 100ms ease, box-shadow 100ms ease;
   box-shadow: inset 0 0 0 1px rgba(0,0,0,0.08);
@@ -1478,10 +2069,21 @@
   font-family: var(--font-monospace);
   font-size: 13px;
   padding: 4px 8px;
-  border-radius: 4px;
+  border-radius: 1px;
   border: 1px solid var(--background-modifier-border);
   background: var(--background-primary);
   color: var(--text-normal);
+}
+
+.icon-board-modal-color-wheel {
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  cursor: pointer;
+  background: none;
+  flex-shrink: 0;
 }
 
 .icon-board-modal-path-display {
@@ -1505,6 +2107,11 @@
   border-top: 1px solid var(--background-modifier-border);
 }
 
+.icon-board-board-name-input {
+  width: 100%;
+  margin: 8px 0 16px;
+}
+
 /* ── Icon picker modal ──────────────────────────────────────── */
 .icon-board-icon-picker-modal {
   width: min(560px, 92vw);
@@ -1522,7 +2129,7 @@
 
 .icon-picker-toggle-btn {
   padding: 4px 14px;
-  border-radius: 6px;
+  border-radius: 2px;
   border: 1px solid var(--background-modifier-border);
   background: var(--background-secondary);
   color: var(--text-muted);
@@ -1539,7 +2146,7 @@
 .icon-picker-search {
   width: 100%;
   padding: 8px 12px;
-  border-radius: 6px;
+  border-radius: 2px;
   border: 1px solid var(--background-modifier-border);
   background: var(--background-primary);
   color: var(--text-normal);
@@ -1563,7 +2170,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  border-radius: 6px;
+  border-radius: 2px;
   cursor: pointer;
   color: var(--text-normal);
   transition: background 80ms ease;
@@ -1584,7 +2191,7 @@
   font-size: 32px;
   text-align: center;
   padding: 12px;
-  border-radius: 8px;
+  border-radius: 2px;
   border: 1px solid var(--background-modifier-border);
   background: var(--background-primary);
   color: var(--text-normal);
@@ -1621,7 +2228,7 @@
   font-family: var(--font-monospace);
   font-size: 12px;
   padding: 10px;
-  border-radius: 6px;
+  border-radius: 2px;
   border: 1px solid var(--background-modifier-border);
   background: var(--background-secondary);
   color: var(--text-normal);
@@ -1693,7 +2300,7 @@
 
 .icon-board-layout-card {
   border: 2px solid var(--background-modifier-border);
-  border-radius: 10px;
+  border-radius: 3px;
   padding: 14px;
   cursor: pointer;
   transition: border-color 100ms ease, background 100ms ease;
@@ -1732,13 +2339,13 @@
   .icon-board-tile {
     width: 88px;
     height: 88px;
-    border-radius: 18px;
+    border-radius: 5px;
   }
 
   .icon-board-add-tile {
     width: 88px;
     height: 88px;
-    border-radius: 18px;
+    border-radius: 5px;
   }
 
   .icon-board-tile-emoji {

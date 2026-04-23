@@ -11,6 +11,7 @@ import {
 import { TileCard, TileTarget } from './file-types';
 import { IconPickerModal } from './icon-picker';
 import { contrastColor } from './color-utils';
+import { createBoardFile } from './file-io';
 
 const COLOR_PALETTE = [
   '#EF4444', '#F59E0B', '#EAB308', '#84CC16',
@@ -61,6 +62,31 @@ export class ConfirmModal extends Modal {
   onClose(): void { this.contentEl.empty(); }
 }
 
+// ── Board name prompt ─────────────────────────────────────────
+
+class NamePromptModal extends Modal {
+  constructor(app: App, private heading: string, private placeholder: string, private onCreate: (name: string) => void) { super(app); }
+
+  onOpen(): void {
+    const { contentEl } = this;
+    contentEl.createEl('h3', { text: this.heading });
+    const input = contentEl.createEl('input', { type: 'text', placeholder: this.placeholder });
+    input.addClass('icon-board-board-name-input');
+    const row = contentEl.createDiv('icon-board-modal-buttons');
+    row.createEl('button', { text: 'Cancel' }).addEventListener('click', () => this.close());
+    const btn = row.createEl('button', { text: 'Create', cls: 'mod-cta' });
+    btn.addEventListener('click', () => {
+      const name = input.value.trim();
+      if (!name) { new Notice('Enter a name.'); return; }
+      this.onCreate(name); this.close();
+    });
+    input.addEventListener('keydown', (e) => { if (e.key === 'Enter') btn.click(); });
+    setTimeout(() => input.focus(), 50);
+  }
+
+  onClose(): void { this.contentEl.empty(); }
+}
+
 // ── Tile modal ────────────────────────────────────────────────
 
 type TargetKind = TileTarget['kind'];
@@ -71,11 +97,13 @@ export class TileModal extends Modal {
   private targetPath: string;
   private onSave: (tile: TileCard) => void;
   private isEditing: boolean;
+  private currentFile: TFile | null;
 
-  constructor(app: App, existingTile: TileCard | null, onSave: (tile: TileCard) => void) {
+  constructor(app: App, existingTile: TileCard | null, onSave: (tile: TileCard) => void, currentFile: TFile | null = null, initialKind?: TargetKind) {
     super(app);
     this.onSave = onSave;
     this.isEditing = existingTile !== null;
+    this.currentFile = currentFile;
 
     if (existingTile) {
       this.tile = { ...existingTile };
@@ -89,7 +117,7 @@ export class TileModal extends Modal {
         icon: 'star',
         color: '#3B82F6',
       };
-      this.targetKind = 'note';
+      this.targetKind = initialKind ?? 'note';
       this.targetPath = '';
     }
 
@@ -173,6 +201,19 @@ export class TileModal extends Modal {
       if (/^#[0-9a-fA-F]{6}$/.test(val)) { this.tile.color = val; this.render(); }
     });
 
+    const colorWheel = colorSetting.controlEl.createEl('input');
+    colorWheel.type = 'color';
+    colorWheel.value = this.tile.color ?? '#3B82F6';
+    colorWheel.addClass('icon-board-modal-color-wheel');
+    colorWheel.addEventListener('input', () => {
+      this.tile.color = colorWheel.value;
+      previewWrap.style.backgroundColor = colorWheel.value;
+      iconEl.style.color = contrastColor(colorWheel.value);
+      hexInput.value = colorWheel.value;
+      palette.querySelectorAll<HTMLElement>('.icon-board-modal-swatch').forEach(s => s.removeClass('is-selected'));
+    });
+    colorWheel.addEventListener('change', () => { this.tile.color = colorWheel.value; this.render(); });
+
     // ── Kind dropdown ──
     new Setting(contentEl)
       .setName('Type')
@@ -251,8 +292,45 @@ export class TileModal extends Modal {
           }).open();
         })
       );
+
+      pathSetting.addButton(btn =>
+        btn.setButtonText('Create new…').onClick(() => {
+          const heading = this.targetKind === 'folder' ? 'New folder'
+            : this.targetKind === 'canvas' ? 'New canvas'
+            : 'New note';
+          const placeholder = this.targetKind === 'folder' ? 'Folder name'
+            : this.targetKind === 'canvas' ? 'Canvas name'
+            : 'Note name';
+          new NamePromptModal(this.app, heading, placeholder, async (name) => {
+            const basePath = this.currentFile?.parent?.path ?? '';
+            const sep = basePath ? '/' : '';
+            if (this.targetKind === 'folder') {
+              const folderPath = basePath + sep + name;
+              try {
+                await this.app.vault.createFolder(folderPath);
+                this.targetPath = folderPath;
+                this.render();
+              } catch { new Notice('Failed to create folder.'); }
+            } else if (this.targetKind === 'canvas') {
+              const filePath = basePath + sep + name + '.canvas';
+              try {
+                const f = await this.app.vault.create(filePath, '{"nodes":[],"edges":[]}');
+                this.targetPath = f.path;
+                this.render();
+              } catch { new Notice('Failed to create canvas.'); }
+            } else {
+              const filePath = basePath + sep + name + '.md';
+              try {
+                const f = await this.app.vault.create(filePath, '');
+                this.targetPath = f.path;
+                this.render();
+              } catch { new Notice('Failed to create note.'); }
+            }
+          }).open();
+        })
+      );
     } else {
-      // Board target: pick an existing .iboard file
+      // Board target: pick an existing .iboard file or create a new nested one
       const iboardPaths = this.app.vault
         .getAllLoadedFiles()
         .filter(f => f instanceof TFile && (f as TFile).extension === 'iboard')
@@ -261,16 +339,14 @@ export class TileModal extends Modal {
 
       const pathSetting = new Setting(contentEl)
         .setName('Target board')
-        .setDesc('Pick an existing .iboard file');
+        .setDesc('Choose an existing board or create a new nested one');
 
       pathSetting.controlEl.createEl('span', {
         text: this.targetPath || 'None selected',
         cls: 'icon-board-modal-path-display' + (this.targetPath ? '' : ' is-empty'),
       });
 
-      if (iboardPaths.length === 0) {
-        pathSetting.descEl.appendText(' — create a board first using "Icon Board: Create new board".');
-      } else {
+      if (iboardPaths.length > 0) {
         pathSetting.addButton(btn =>
           btn.setButtonText('Browse…').onClick(() => {
             new PathSuggestModal(this.app, iboardPaths, selected => {
@@ -280,6 +356,29 @@ export class TileModal extends Modal {
           })
         );
       }
+
+      pathSetting.addButton(btn =>
+        btn.setButtonText('Create new…').onClick(() => {
+          new NamePromptModal(this.app, 'New nested board', 'Board name', async (name) => {
+            // Nested boards live in a folder named after the current board stem
+            let folderPath = '';
+            if (this.currentFile) {
+              folderPath = this.currentFile.path.replace(/\.iboard$/, '');
+            }
+            if (folderPath && !this.app.vault.getAbstractFileByPath(folderPath)) {
+              try { await this.app.vault.createFolder(folderPath); } catch { /* already exists */ }
+            }
+            const folder = folderPath
+              ? (this.app.vault.getAbstractFileByPath(folderPath) as TFolder | null)
+              : null;
+            try {
+              const newFile = await createBoardFile(this.app, name, folder, 'freeform');
+              this.targetPath = newFile.path;
+              this.render();
+            } catch { new Notice('Failed to create board.'); }
+          }).open();
+        })
+      );
     }
 
     // ── Buttons ──

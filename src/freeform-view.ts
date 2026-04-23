@@ -3,14 +3,15 @@ import {
   MarkdownRenderer, Component, FuzzySuggestModal, requestUrl,
 } from 'obsidian';
 import {
-  IconBoardFile, TileCard, StickyCard, ChecklistCard, NoteLinkCard,
-  ImageCard, BookmarkCard, KanbanColumnCard, KanbanItem, Card, Connection,
+  IconBoardFile, TileCard, StickyCard, ChecklistCard, ChecklistItem, NoteLinkCard,
+  ImageCard, AudioCard, BookmarkCard, KanbanColumnCard, KanbanItem, Card, Connection,
 } from './file-types';
 import {
   straightAnchors, elbowAnchors, buildStraightPath, buildElbowPath, resolveOrientation, rectExitPoint,
 } from './canvas/geometry';
 import { contrastColor } from './color-utils';
 import { TileModal } from './tile-modal';
+import { TextFormatToolbar } from './text-format-toolbar';
 import { snap } from './canvas/snap';
 import {
   Viewport, applyWheelZoom, applyPinchZoom,
@@ -27,9 +28,9 @@ const STICKY_DEFAULT_W    = 180;
 const STICKY_DEFAULT_H    = 160;
 const STICKY_MIN_W        = 120;
 const STICKY_MIN_H        = 80;
-const CHECKLIST_DEFAULT_W = 220;
-const CHECKLIST_DEFAULT_H = 200;
-const CHECKLIST_MIN_W     = 160;
+const CHECKLIST_DEFAULT_W = 240;
+const CHECKLIST_DEFAULT_H = 300;
+const CHECKLIST_MIN_W     = 180;
 const CHECKLIST_MIN_H     = 120;
 const NOTELINK_DEFAULT_W  = 280;
 const NOTELINK_DEFAULT_H  = 240;
@@ -45,6 +46,11 @@ const BOOKMARK_DEFAULT_W  = 260;
 const BOOKMARK_DEFAULT_H  = 220;
 const BOOKMARK_MIN_W      = 180;
 const BOOKMARK_MIN_H      = 100;
+const AUDIO_DEFAULT_W     = 280;
+const AUDIO_DEFAULT_H     = 100;
+const AUDIO_MIN_W         = 200;
+const AUDIO_MIN_H         = 72;
+const AUDIO_EXTS          = ['mp3', 'wav'];
 const KANBAN_DEFAULT_W    = 220;
 const KANBAN_DEFAULT_H    = 340;
 const KANBAN_MIN_W        = 160;
@@ -70,6 +76,8 @@ const STICKY_COLORS: { color: string; name: string }[] = [
   { color: '#FBB6CE', name: 'Pink' },
   { color: '#FCD34D', name: 'Amber' },
   { color: '#A7F3D0', name: 'Mint' },
+  { color: '#D1D5DB', name: 'Grey' },
+  { color: '#F3F4F6', name: 'Light Grey' },
 ];
 
 const KANBAN_COLORS: { color: string; name: string }[] = [
@@ -84,7 +92,7 @@ const KANBAN_COLORS: { color: string; name: string }[] = [
 ];
 
 // ── Type helpers ───────────────────────────────────────────────
-type SupportedCard = TileCard | StickyCard | ChecklistCard | NoteLinkCard | ImageCard | BookmarkCard | KanbanColumnCard;
+type SupportedCard = TileCard | StickyCard | ChecklistCard | NoteLinkCard | ImageCard | AudioCard | BookmarkCard | KanbanColumnCard;
 
 function isSupportedCard(card: Card): card is SupportedCard { return true; }
 
@@ -94,6 +102,7 @@ function cardMinSize(kind: Card['kind']): { w: number; h: number } {
   if (kind === 'note-link') return { w: NOTELINK_MIN_W,  h: NOTELINK_MIN_H  };
   if (kind === 'image')     return { w: IMAGE_MIN_W,     h: IMAGE_MIN_H     };
   if (kind === 'bookmark')  return { w: BOOKMARK_MIN_W,  h: BOOKMARK_MIN_H  };
+  if (kind === 'audio')     return { w: AUDIO_MIN_W,     h: AUDIO_MIN_H     };
   if (kind === 'kanban-column') return { w: KANBAN_MIN_W, h: KANBAN_MIN_H };
   return { w: TILE_MIN_W, h: TILE_MIN_H };
 }
@@ -116,6 +125,15 @@ class VaultImagePickerModal extends FuzzySuggestModal<TFile> {
   constructor(app: App, private onChoose: (f: TFile) => void) { super(app); }
   getItems(): TFile[] {
     return this.app.vault.getFiles().filter(f => IMAGE_EXTS.includes(f.extension.toLowerCase()));
+  }
+  getItemText(f: TFile): string { return f.path; }
+  onChooseItem(f: TFile): void { this.onChoose(f); }
+}
+
+class VaultAudioPickerModal extends FuzzySuggestModal<TFile> {
+  constructor(app: App, private onChoose: (f: TFile) => void) { super(app); }
+  getItems(): TFile[] {
+    return this.app.vault.getFiles().filter(f => AUDIO_EXTS.includes(f.extension.toLowerCase()));
   }
   getItemText(f: TFile): string { return f.path; }
   onChooseItem(f: TFile): void { this.onChoose(f); }
@@ -225,6 +243,7 @@ export class FreeformRenderer extends Component {
   private marqueeEl!: HTMLElement;
   private zoomPill!: HTMLElement;
   private toolbarEl!: HTMLElement;
+  private fabEl: HTMLElement | null = null;
   private svgEl!: SVGSVGElement;
   private svgDefs!: SVGDefsElement;
   private connectionPaths = new Map<string, SVGPathElement>();
@@ -233,6 +252,7 @@ export class FreeformRenderer extends Component {
   private connectSourceId: string | null = null;
   private ghostPath: SVGPathElement | null = null;
   private connectToolBtn: HTMLElement | null = null;
+  private dotsToggleBtn: HTMLElement | null = null;
   private connectMoveListener: ((e: PointerEvent) => void) | null = null;
 
   private connectionHitPaths = new Map<string, SVGPathElement>();
@@ -252,6 +272,10 @@ export class FreeformRenderer extends Component {
   private isPanning = false;
 
   private saveTimer: ReturnType<typeof setTimeout> | null = null;
+  private alignBarEl: HTMLElement | null = null;
+  private pendingTool: string | null = null;
+  private pendingToolBtn: HTMLElement | null = null;
+  private overflowPopover: HTMLElement | null = null;
 
   private docKeyDown!: (e: KeyboardEvent) => void;
   private docKeyUp!: (e: KeyboardEvent) => void;
@@ -268,7 +292,9 @@ export class FreeformRenderer extends Component {
     private onNavigate: (boardPath: string) => Promise<void>,
     private onSave: (board: IconBoardFile) => Promise<void>,
     private attachmentFolder = 'attachments/icon-board',
-    private bookmarkCacheDays = 30
+    private bookmarkCacheDays = 30,
+    private defaultStickyColor?: string,
+    private toolbarPosition: 'left' | 'right' | 'top' | 'bottom' = 'left'
   ) {
     super();
     this.vp = { ...(board.viewport ?? { x: 0, y: 0, zoom: 1 }) };
@@ -285,6 +311,7 @@ export class FreeformRenderer extends Component {
 
     this.outer = this.container.createDiv('icon-board-canvas-outer');
     this.outer.setAttribute('tabindex', '0');
+    if (this.board.dotsHidden) this.outer.addClass('no-dots');
     this.inner = this.outer.createDiv('icon-board-canvas-inner');
     this.marqueeEl = this.outer.createDiv('icon-board-marquee');
     this.marqueeEl.style.display = 'none';
@@ -298,6 +325,7 @@ export class FreeformRenderer extends Component {
     this.applyViewport();
     this.bindCanvasEvents();
     this.renderToolbar();
+    this.renderAlignBar();
     this.renderZoomPill();
 
     // Re-fetch stale bookmarks
@@ -399,7 +427,13 @@ export class FreeformRenderer extends Component {
       if (this.selectedConnectionId) this.deselectConnection();
       if (e.button === 1 || (e.button === 0 && this.spaceDown)) {
         e.preventDefault(); this.startPan(e);
+      } else if (e.button === 0 && this.pendingTool) {
+        e.preventDefault();
+        const rect = this.outer.getBoundingClientRect();
+        const cp = screenToCanvas(e.clientX - rect.left, e.clientY - rect.top, this.vp);
+        this.placePendingTool(cp.x, cp.y);
       } else if (e.button === 0) {
+        this.closeOverflow();
         if (!e.shiftKey) { this.selection.clear(); this.refreshSelectionVisuals(); }
         this.startMarquee(e);
       }
@@ -423,6 +457,8 @@ export class FreeformRenderer extends Component {
         this.addNoteLinkAt(snap(cp.x - NOTELINK_DEFAULT_W / 2), snap(cp.y - NOTELINK_DEFAULT_H / 2))));
       menu.addItem(i => i.setTitle('Add image').setIcon('image').onClick(() =>
         this.addImageAt(snap(cp.x - IMAGE_DEFAULT_W / 2), snap(cp.y - IMAGE_DEFAULT_H / 2))));
+      menu.addItem(i => i.setTitle('Add audio').setIcon('music').onClick(() =>
+        this.addAudioAt(snap(cp.x - AUDIO_DEFAULT_W / 2), snap(cp.y - AUDIO_DEFAULT_H / 2))));
       menu.addItem(i => i.setTitle('Add bookmark').setIcon('bookmark').onClick(() =>
         this.addBookmarkAt(snap(cp.x - BOOKMARK_DEFAULT_W / 2), snap(cp.y - BOOKMARK_DEFAULT_H / 2))));
       menu.addSeparator();
@@ -458,7 +494,7 @@ export class FreeformRenderer extends Component {
 
     // Drag-and-drop from Finder or vault sidebar
     this.outer.addEventListener('dragover', (e) => {
-      if (this.isImageDrag(e)) { e.preventDefault(); e.dataTransfer!.dropEffect = 'copy'; }
+      if (this.isDropAccepted(e)) { e.preventDefault(); e.dataTransfer!.dropEffect = 'copy'; }
     });
     this.outer.addEventListener('drop', async (e) => {
       e.preventDefault();
@@ -467,10 +503,15 @@ export class FreeformRenderer extends Component {
         const rect = this.outer.getBoundingClientRect();
         let offsetX = 0;
         for (const f of Array.from(files)) {
-          if (!f.type.startsWith('image/')) continue;
-          const cp = screenToCanvas(e.clientX - rect.left + offsetX, e.clientY - rect.top, this.vp);
-          await this.handleDroppedImage(f, snap(cp.x - IMAGE_DEFAULT_W / 2), snap(cp.y - IMAGE_DEFAULT_H / 2));
-          offsetX += IMAGE_DEFAULT_W + 16;
+          if (f.type.startsWith('image/')) {
+            const cp = screenToCanvas(e.clientX - rect.left + offsetX, e.clientY - rect.top, this.vp);
+            await this.handleDroppedImage(f, snap(cp.x - IMAGE_DEFAULT_W / 2), snap(cp.y - IMAGE_DEFAULT_H / 2));
+            offsetX += IMAGE_DEFAULT_W + 16;
+          } else if (f.type.startsWith('audio/')) {
+            const cp = screenToCanvas(e.clientX - rect.left + offsetX, e.clientY - rect.top, this.vp);
+            await this.handleDroppedAudio(f, snap(cp.x - AUDIO_DEFAULT_W / 2), snap(cp.y - AUDIO_DEFAULT_H / 2));
+            offsetX += AUDIO_DEFAULT_W + 16;
+          }
         }
         return;
       }
@@ -478,13 +519,23 @@ export class FreeformRenderer extends Component {
       const draggable = (this.app as any).dragManager?.draggable;
       if (draggable?.type === 'file' && draggable.file) {
         const vf = draggable.file as TFile;
-        if (IMAGE_EXTS.includes(vf.extension.toLowerCase())) {
-          const rect = this.outer.getBoundingClientRect();
-          const cp = screenToCanvas(e.clientX - rect.left, e.clientY - rect.top, this.vp);
+        const ext = vf.extension.toLowerCase();
+        const rect = this.outer.getBoundingClientRect();
+        const cp = screenToCanvas(e.clientX - rect.left, e.clientY - rect.top, this.vp);
+        if (IMAGE_EXTS.includes(ext)) {
           const card: ImageCard = {
             id: crypto.randomUUID(), kind: 'image',
             x: snap(cp.x - IMAGE_DEFAULT_W / 2), y: snap(cp.y - IMAGE_DEFAULT_H / 2),
             w: IMAGE_DEFAULT_W, h: IMAGE_DEFAULT_H, z: this.nextZ(),
+            source: { type: 'vault', path: vf.path },
+          };
+          this.pushUndo(); this.board.cards.push(card); await this.saveNow();
+          this.createCardEl(card); this.selection.select(card.id); this.refreshSelectionVisuals();
+        } else if (AUDIO_EXTS.includes(ext)) {
+          const card: AudioCard = {
+            id: crypto.randomUUID(), kind: 'audio',
+            x: snap(cp.x - AUDIO_DEFAULT_W / 2), y: snap(cp.y - AUDIO_DEFAULT_H / 2),
+            w: AUDIO_DEFAULT_W, h: AUDIO_DEFAULT_H, z: this.nextZ(),
             source: { type: 'vault', path: vf.path },
           };
           this.pushUndo(); this.board.cards.push(card); await this.saveNow();
@@ -568,7 +619,8 @@ export class FreeformRenderer extends Component {
     el.removeClass(
       'icon-board-freeform-tile-card', 'icon-board-freeform-sticky-card',
       'icon-board-freeform-checklist-card', 'icon-board-freeform-notelink-card',
-      'icon-board-freeform-image-card', 'icon-board-freeform-bookmark-card'
+      'icon-board-freeform-image-card', 'icon-board-freeform-audio-card',
+      'icon-board-freeform-bookmark-card'
     );
     switch (card.kind) {
       case 'tile':      this.renderTileContent(el, card);      break;
@@ -576,6 +628,7 @@ export class FreeformRenderer extends Component {
       case 'checklist': this.renderChecklistContent(el, card); break;
       case 'note-link': this.renderNoteLinkContent(el, card);  break;
       case 'image':     this.renderImageContent(el, card);     break;
+      case 'audio':     this.renderAudioContent(el, card);     break;
       case 'bookmark':  this.renderBookmarkContent(el, card);  break;
       case 'kanban-column': this.renderKanbanColumnContent(el, card); break;
     }
@@ -630,6 +683,9 @@ export class FreeformRenderer extends Component {
     el.addClass('icon-board-freeform-sticky-card');
     el.style.backgroundColor = card.color;
     const textEl = el.createDiv('icon-board-sticky-text');
+    if (card.textScale) textEl.addClass(`text-scale-${card.textScale}`);
+    if (card.textColor) textEl.style.color = card.textColor;
+    if (card.textAlign) textEl.style.textAlign = card.textAlign;
     MarkdownRenderer.render(this.app, card.text || '*Double-click to edit…*', textEl, '', this);
     el.createDiv('icon-board-card-resize-handle');
   }
@@ -637,25 +693,43 @@ export class FreeformRenderer extends Component {
   private editStickyInline(el: HTMLElement, card: StickyCard): void {
     const textEl = el.querySelector('.icon-board-sticky-text') as HTMLElement | null;
     if (!textEl || el.querySelector('.icon-board-sticky-editor')) return;
-    const textarea = el.createEl('textarea', { cls: 'icon-board-sticky-editor' });
-    textarea.value = card.text;
+
+    const editor = el.createDiv('icon-board-sticky-editor') as HTMLElement;
+    editor.contentEditable = 'true';
+    // Seed with rendered HTML so coloured/bold text appears as-is while editing
+    editor.innerHTML = card.text ? textEl.innerHTML : '';
     textEl.style.display = 'none';
-    textarea.focus();
-    textarea.setSelectionRange(textarea.value.length, textarea.value.length);
+
+    // Place cursor at end
+    editor.focus();
+    const r = document.createRange();
+    r.selectNodeContents(editor);
+    r.collapse(false);
+    const s = window.getSelection();
+    s?.removeAllRanges();
+    s?.addRange(r);
+
+    // Stop pointer events from bubbling to the card drag handler
+    editor.addEventListener('pointerdown', e => e.stopPropagation());
+
+    const fmtToolbar = new TextFormatToolbar(editor, el, this.container);
 
     const commit = () => {
-      if (!el.contains(textarea)) return;
-      this.pushUndo(); card.text = textarea.value;
-      textarea.remove(); textEl.style.display = '';
+      if (!el.contains(editor)) return;
+      fmtToolbar.destroy();
+      this.pushUndo();
+      card.text = editor.innerHTML;
+      editor.remove(); textEl.style.display = '';
       textEl.empty();
       MarkdownRenderer.render(this.app, card.text || '*Double-click to edit…*', textEl, '', this);
       this.scheduleSave();
     };
-    textarea.addEventListener('blur', commit);
-    textarea.addEventListener('keydown', (e) => {
+    editor.addEventListener('blur', commit);
+    editor.addEventListener('keydown', (e) => {
       if (e.key === 'Escape') {
-        e.preventDefault(); textarea.removeEventListener('blur', commit);
-        textarea.remove(); textEl.style.display = '';
+        e.preventDefault(); fmtToolbar.destroy();
+        editor.removeEventListener('blur', commit);
+        editor.remove(); textEl.style.display = '';
       }
     });
   }
@@ -664,54 +738,98 @@ export class FreeformRenderer extends Component {
 
   private renderChecklistContent(el: HTMLElement, card: ChecklistCard): void {
     el.addClass('icon-board-freeform-checklist-card');
+    // Lazy migration: v2 cards have no accentColor
+    if (!card.accentColor) card.accentColor = '#EF4444';
     el.style.backgroundColor = card.color;
 
+    // Accent bar
+    const accentBar = el.createDiv('icon-board-checklist-accent');
+    accentBar.style.backgroundColor = card.accentColor;
+
+    // Title
     const titleEl = el.createEl('input', { cls: 'icon-board-checklist-title' }) as HTMLInputElement;
     titleEl.type = 'text'; titleEl.value = card.title || ''; titleEl.placeholder = 'Checklist';
+    titleEl.addEventListener('pointerdown', e => e.stopPropagation());
     titleEl.addEventListener('input', () => { card.title = titleEl.value; });
     titleEl.addEventListener('blur', () => this.scheduleSave());
 
+    // List
     const listEl = el.createDiv('icon-board-checklist-list');
     for (const item of card.items) this.appendChecklistItem(listEl, card, item);
-
-    const addEl = el.createDiv({ cls: 'icon-board-checklist-add', text: '+ Add item' });
-    addEl.addEventListener('pointerdown', (e) => { e.stopPropagation(); });
-    addEl.addEventListener('click', (e) => {
-      e.stopPropagation();
-      const newItem = { id: crypto.randomUUID(), text: '', done: false };
-      this.pushUndo(); card.items.push(newItem);
-      const row = this.appendChecklistItem(listEl, card, newItem);
-      setTimeout(() => (row.querySelector('.icon-board-checklist-item-input') as HTMLElement | null)?.focus(), 0);
-    });
+    this.appendChecklistGhost(listEl, card);
 
     el.createDiv('icon-board-card-resize-handle');
   }
 
-  private appendChecklistItem(
-    listEl: HTMLElement, card: ChecklistCard,
-    item: { id: string; text: string; done: boolean }
-  ): HTMLElement {
+  private appendChecklistItem(listEl: HTMLElement, card: ChecklistCard, item: ChecklistItem): HTMLElement {
     const row = listEl.createDiv('icon-board-checklist-item');
+    row.dataset.id = item.id;
     if (item.done) row.addClass('is-done');
+    if (item.isHeader) row.addClass('is-header');
+    if (item.parentId) row.addClass('is-child');
 
     const cb = row.createEl('input') as HTMLInputElement;
     cb.type = 'checkbox'; cb.checked = item.done; cb.className = 'icon-board-checklist-cb';
-    cb.addEventListener('change', () => { item.done = cb.checked; row.toggleClass('is-done', item.done); this.scheduleSave(); });
+    if (item.isHeader) this.setHeaderCheckboxState(cb, card, item.id);
+
+    cb.addEventListener('pointerdown', e => e.stopPropagation());
+    cb.addEventListener('change', () => {
+      if (item.isHeader) {
+        // Cascade to all children
+        const children = card.items.filter(i => i.parentId === item.id);
+        for (const child of children) {
+          child.done = cb.checked;
+          const childRow = listEl.querySelector<HTMLElement>(`[data-id="${child.id}"]`);
+          if (childRow) {
+            childRow.toggleClass('is-done', child.done);
+            const childCb = childRow.querySelector<HTMLInputElement>('.icon-board-checklist-cb');
+            if (childCb) { childCb.checked = child.done; childCb.indeterminate = false; }
+          }
+        }
+      }
+      item.done = cb.checked;
+      row.toggleClass('is-done', item.done);
+      if (item.parentId) this.refreshHeaderCheckbox(listEl, card, item.parentId);
+      this.scheduleSave();
+    });
 
     const input = row.createEl('input') as HTMLInputElement;
-    input.type = 'text'; input.value = item.text; input.placeholder = 'Item…';
+    input.type = 'text'; input.value = item.text;
+    input.placeholder = item.isHeader ? 'Section…' : 'Add a task…';
     input.className = 'icon-board-checklist-item-input';
+    input.addEventListener('pointerdown', e => e.stopPropagation());
     input.addEventListener('input', () => { item.text = input.value; });
     input.addEventListener('blur', () => this.scheduleSave());
-    input.addEventListener('keydown', (e) => {
+    input.addEventListener('keydown', e => {
       if (e.key === 'Enter') {
         e.preventDefault();
         const idx = card.items.indexOf(item);
-        const ni = { id: crypto.randomUUID(), text: '', done: false };
+        const ni: ChecklistItem = { id: crypto.randomUUID(), text: '', done: false, parentId: item.parentId };
         card.items.splice(idx + 1, 0, ni);
         const nr = this.appendChecklistItem(listEl, card, ni);
         row.after(nr);
-        (nr.querySelector('.icon-board-checklist-item-input') as HTMLElement | null)?.focus();
+        setTimeout(() => nr.querySelector<HTMLElement>('.icon-board-checklist-item-input')?.focus(), 0);
+      }
+      if (e.key === 'Tab') {
+        e.preventDefault();
+        if (e.shiftKey) {
+          if (item.parentId) {
+            item.parentId = undefined;
+            row.removeClass('is-child');
+            this.scheduleSave();
+          }
+        } else if (!item.parentId && !item.isHeader) {
+          const idx = card.items.indexOf(item);
+          for (let i = idx - 1; i >= 0; i--) {
+            const above = card.items[i];
+            if (above.isHeader || !above.parentId) {
+              item.parentId = above.id;
+              row.addClass('is-child');
+              this.scheduleSave();
+              break;
+            }
+          }
+        }
       }
       if (e.key === 'Backspace' && input.value === '') {
         const idx = card.items.indexOf(item);
@@ -719,12 +837,84 @@ export class FreeformRenderer extends Component {
           e.preventDefault(); card.items.splice(idx, 1);
           const prev = row.previousElementSibling as HTMLElement | null;
           row.remove();
-          (prev?.querySelector('.icon-board-checklist-item-input') as HTMLElement | null)?.focus();
+          prev?.querySelector<HTMLElement>('.icon-board-checklist-item-input')?.focus();
           this.scheduleSave();
         }
       }
     });
     return row;
+  }
+
+  private appendChecklistGhost(listEl: HTMLElement, card: ChecklistCard): HTMLElement {
+    const row = listEl.createDiv('icon-board-checklist-item icon-board-checklist-ghost');
+
+    const cb = row.createEl('input') as HTMLInputElement;
+    cb.type = 'checkbox'; cb.className = 'icon-board-checklist-cb'; cb.disabled = true;
+    cb.addEventListener('pointerdown', e => e.stopPropagation());
+
+    const input = row.createEl('input') as HTMLInputElement;
+    input.type = 'text'; input.placeholder = 'Add a task…';
+    input.className = 'icon-board-checklist-item-input';
+    input.addEventListener('pointerdown', e => e.stopPropagation());
+
+    let committed = false;
+    const commit = () => {
+      if (committed) return;
+      const text = input.value.trim();
+      if (!text) return;
+      committed = true;
+      const newItem: ChecklistItem = { id: crypto.randomUUID(), text, done: false };
+      this.pushUndo(); card.items.push(newItem);
+      row.remove();
+      this.appendChecklistItem(listEl, card, newItem);
+      this.appendChecklistGhost(listEl, card);
+      this.scheduleSave();
+    };
+
+    input.addEventListener('blur', commit);
+    input.addEventListener('keydown', (e) => {
+      e.stopPropagation();
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        if (!input.value.trim()) return;
+        commit();
+        setTimeout(() => listEl.querySelector<HTMLInputElement>('.icon-board-checklist-ghost .icon-board-checklist-item-input')?.focus(), 0);
+      } else if (e.key === 'Escape') {
+        e.preventDefault(); input.value = ''; input.blur();
+      }
+    });
+
+    return row;
+  }
+
+  private setHeaderCheckboxState(cb: HTMLInputElement, card: ChecklistCard, headerId: string): void {
+    const children = card.items.filter(i => i.parentId === headerId);
+    const doneCount = children.filter(i => i.done).length;
+    if (children.length === 0) { cb.indeterminate = false; return; }
+    if (doneCount === children.length) { cb.checked = true; cb.indeterminate = false; }
+    else if (doneCount > 0) { cb.indeterminate = true; }
+    else { cb.checked = false; cb.indeterminate = false; }
+  }
+
+  private refreshHeaderCheckbox(listEl: HTMLElement, card: ChecklistCard, headerId: string): void {
+    const headerItem = card.items.find(i => i.id === headerId);
+    if (!headerItem) return;
+    const headerRow = listEl.querySelector<HTMLElement>(`[data-id="${headerId}"]`);
+    const headerCb = headerRow?.querySelector<HTMLInputElement>('.icon-board-checklist-cb');
+    if (!headerCb) return;
+    const children = card.items.filter(i => i.parentId === headerId);
+    const doneCount = children.filter(i => i.done).length;
+    if (children.length === 0) return;
+    if (doneCount === children.length) {
+      headerCb.checked = true; headerCb.indeterminate = false;
+      headerItem.done = true; headerRow?.addClass('is-done');
+    } else if (doneCount > 0) {
+      headerCb.indeterminate = true;
+      headerItem.done = false; headerRow?.removeClass('is-done');
+    } else {
+      headerCb.checked = false; headerCb.indeterminate = false;
+      headerItem.done = false; headerRow?.removeClass('is-done');
+    }
   }
 
   // ── NoteLink ───────────────────────────────────────────────────
@@ -803,13 +993,108 @@ export class FreeformRenderer extends Component {
       wrap.createDiv({ cls: 'icon-board-image-missing-label', text: 'Failed to load' });
     });
 
-    const captionInput = el.createEl('input', { cls: 'icon-board-image-caption' }) as HTMLInputElement;
-    captionInput.type = 'text'; captionInput.value = card.caption || '';
-    captionInput.placeholder = 'Add caption…';
-    captionInput.addEventListener('pointerdown', (e) => e.stopPropagation());
-    captionInput.addEventListener('input', () => { card.caption = captionInput.value; });
-    captionInput.addEventListener('blur', () => this.scheduleSave());
+    // Caption — render/edit two-state with format bar
+    const captionWrap = el.createDiv('icon-board-image-caption-wrap');
+    if (card.captionHidden) captionWrap.addClass('is-hidden');
 
+    const captionFmtBar = captionWrap.createDiv('icon-board-caption-format-bar');
+    captionFmtBar.style.display = 'none';
+    captionFmtBar.addEventListener('pointerdown', (e) => e.preventDefault());
+
+    const captionViewEl = captionWrap.createDiv('icon-board-image-caption-view');
+    if (card.captionScale) captionViewEl.addClass(`text-scale-${card.captionScale}`);
+    if (card.captionColor) captionViewEl.style.color = card.captionColor;
+    const renderCaptionView = () => {
+      captionViewEl.empty();
+      if (card.caption) {
+        MarkdownRenderer.render(this.app, card.caption, captionViewEl, '', this);
+      } else {
+        captionViewEl.createSpan({ cls: 'icon-board-caption-placeholder', text: 'Add caption…' });
+      }
+    };
+    renderCaptionView();
+
+    const captionEl = captionWrap.createEl('textarea', { cls: 'icon-board-image-caption' }) as HTMLTextAreaElement;
+    captionEl.value = card.caption || '';
+    captionEl.placeholder = 'Add caption…';
+    captionEl.style.display = 'none';
+    if (card.captionScale) captionEl.addClass(`text-scale-${card.captionScale}`);
+    if (card.captionColor) captionEl.style.color = card.captionColor;
+
+    const enterCaptionEdit = () => {
+      captionViewEl.style.display = 'none';
+      captionEl.style.display = '';
+      captionFmtBar.style.display = 'flex';
+      captionEl.focus();
+      captionEl.setSelectionRange(captionEl.value.length, captionEl.value.length);
+    };
+
+    const exitCaptionEdit = () => {
+      card.caption = captionEl.value;
+      captionViewEl.style.display = '';
+      captionEl.style.display = 'none';
+      captionFmtBar.style.display = 'none';
+      renderCaptionView();
+      this.scheduleSave();
+    };
+
+    captionViewEl.addEventListener('click', (e) => { e.stopPropagation(); enterCaptionEdit(); });
+    captionViewEl.addEventListener('pointerdown', (e) => e.stopPropagation());
+    captionEl.addEventListener('pointerdown', (e) => e.stopPropagation());
+    captionEl.addEventListener('input', () => { card.caption = captionEl.value; });
+    captionEl.addEventListener('blur', exitCaptionEdit);
+    captionEl.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') { captionEl.removeEventListener('blur', exitCaptionEdit); captionEl.value = card.caption || ''; exitCaptionEdit(); }
+    });
+
+    // Caption format bar helpers
+    const wrapCaption = (open: string, close: string) => {
+      const start = captionEl.selectionStart, end = captionEl.selectionEnd;
+      const sel = captionEl.value.slice(start, end);
+      captionEl.setRangeText(open + (sel || 'text') + close, start, end, 'select');
+      captionEl.focus();
+    };
+    const capFmtBtn = (label: string, title: string, fn: () => void) => {
+      const b = captionFmtBar.createEl('button', { cls: 'icon-board-format-btn', text: label });
+      b.setAttribute('title', title);
+      b.addEventListener('click', fn);
+    };
+    capFmtBtn('B', 'Bold', () => wrapCaption('**', '**'));
+    capFmtBtn('I', 'Italic', () => wrapCaption('*', '*'));
+    capFmtBtn('S', 'Strikethrough', () => wrapCaption('~~', '~~'));
+    captionFmtBar.createDiv('icon-board-format-sep');
+    const capColorBtn = captionFmtBar.createEl('input', { cls: 'icon-board-format-color' }) as HTMLInputElement;
+    capColorBtn.type = 'color'; capColorBtn.value = '#e11d48'; capColorBtn.title = 'Text colour';
+    capColorBtn.addEventListener('change', () => {
+      const start = captionEl.selectionStart, end = captionEl.selectionEnd;
+      const sel = captionEl.value.slice(start, end);
+      captionEl.setRangeText(`<span style="color:${capColorBtn.value}">${sel || 'text'}</span>`, start, end, 'select');
+      captionEl.focus();
+    });
+
+    el.createDiv('icon-board-card-resize-handle');
+  }
+
+  // ── Audio ──────────────────────────────────────────────────────
+
+  private renderAudioContent(el: HTMLElement, card: AudioCard): void {
+    el.addClass('icon-board-freeform-audio-card');
+    const header = el.createDiv('icon-board-audio-header');
+    const iconEl = header.createDiv('icon-board-audio-icon');
+    setIcon(iconEl, 'music');
+    const name = card.title ?? card.source.path.split('/').pop()?.replace(/\.[^.]+$/, '') ?? 'Audio';
+    header.createDiv({ cls: 'icon-board-audio-title', text: name });
+    const vf = this.app.vault.getAbstractFileByPath(card.source.path);
+    if (vf instanceof TFile) {
+      const audio = el.createEl('audio');
+      audio.src = this.app.vault.getResourcePath(vf);
+      audio.controls = true;
+      audio.addClass('icon-board-audio-player');
+      audio.addEventListener('pointerdown', (e) => e.stopPropagation());
+      audio.addEventListener('click', (e) => e.stopPropagation());
+    } else {
+      el.createDiv({ cls: 'icon-board-audio-missing', text: 'File not found' });
+    }
     el.createDiv('icon-board-card-resize-handle');
   }
 
@@ -886,29 +1171,32 @@ export class FreeformRenderer extends Component {
     }
 
     itemsEl.addEventListener('dragenter', (e) => {
-      if (this.isImageDrag(e)) { e.preventDefault(); itemsEl.addClass('is-drag-over'); }
+      if (this.isDropAccepted(e)) { e.preventDefault(); itemsEl.addClass('is-drag-over'); }
     });
     itemsEl.addEventListener('dragleave', (e) => {
       if (!itemsEl.contains(e.relatedTarget as Node)) itemsEl.removeClass('is-drag-over');
     });
     itemsEl.addEventListener('dragover', (e) => {
-      if (this.isImageDrag(e)) { e.preventDefault(); e.stopPropagation(); e.dataTransfer!.dropEffect = 'copy'; }
+      if (this.isDropAccepted(e)) { e.preventDefault(); e.stopPropagation(); e.dataTransfer!.dropEffect = 'copy'; }
     });
     itemsEl.addEventListener('drop', async (e) => {
       itemsEl.removeClass('is-drag-over');
-      if (!this.isImageDrag(e)) return;
+      if (!this.isDropAccepted(e)) return;
       e.preventDefault(); e.stopPropagation();
       const files = e.dataTransfer?.files;
       if (files?.length) {
         for (const f of Array.from(files)) {
           if (f.type.startsWith('image/')) await this.handleDroppedImageToKanban(f, card, itemsEl);
+          else if (f.type.startsWith('audio/')) await this.handleDroppedAudioToKanban(f, card, itemsEl);
         }
         return;
       }
       const draggable = (this.app as any).dragManager?.draggable;
       if (draggable?.type === 'file' && draggable.file) {
         const vf = draggable.file as TFile;
-        if (IMAGE_EXTS.includes(vf.extension.toLowerCase())) this.addKanbanImageItem(vf.path, card, itemsEl);
+        const ext = vf.extension.toLowerCase();
+        if (IMAGE_EXTS.includes(ext)) this.addKanbanImageItem(vf.path, card, itemsEl);
+        else if (AUDIO_EXTS.includes(ext)) this.addKanbanAudioItem(vf.path, card, itemsEl);
       }
     });
 
@@ -1046,6 +1334,19 @@ export class FreeformRenderer extends Component {
       }
     }
 
+    if (item.audioPath) {
+      const audioWrap = bodyEl.createDiv('icon-board-kanban-item-audio');
+      const vf = this.app.vault.getAbstractFileByPath(item.audioPath);
+      if (vf instanceof TFile) {
+        const audio = audioWrap.createEl('audio');
+        audio.src = this.app.vault.getResourcePath(vf);
+        audio.controls = true;
+        audio.addClass('icon-board-kanban-audio-player');
+        audio.addEventListener('pointerdown', (e) => e.stopPropagation());
+        audio.addEventListener('click', (e) => e.stopPropagation());
+      }
+    }
+
     const hasMeta = item.linkedNotePath || (item.tags && item.tags.length > 0);
     if (hasMeta) {
       const metaEl = bodyEl.createDiv('icon-board-kanban-item-meta');
@@ -1137,6 +1438,19 @@ export class FreeformRenderer extends Component {
             this.rebuildKanbanCard(card); this.scheduleSave();
           }));
         }
+      }
+      menu.addSeparator();
+      menu.addItem(i => i.setTitle('Attach audio…').setIcon('music').onClick(() => {
+        new VaultAudioPickerModal(this.app, (file) => {
+          this.pushUndo(); item.audioPath = file.path;
+          this.rebuildKanbanCard(card); this.scheduleSave();
+        }).open();
+      }));
+      if (item.audioPath) {
+        menu.addItem(i => i.setTitle('Remove audio').setIcon('x').onClick(() => {
+          this.pushUndo(); item.audioPath = undefined;
+          this.rebuildKanbanCard(card); this.scheduleSave();
+        }));
       }
       menu.addSeparator();
       menu.addItem(i => i.setTitle('Add tag…').setIcon('tag').onClick(() => this.promptItemTag(card, item)));
@@ -1373,6 +1687,7 @@ export class FreeformRenderer extends Component {
 
   private refreshSelectionVisuals(): void {
     for (const [id, el] of this.cardEls) el.toggleClass('is-selected', this.selection.has(id));
+    this.alignBarEl?.toggleClass('is-visible', this.selection.getIds().length > 1);
   }
 
   // ── Card events ────────────────────────────────────────────────
@@ -1385,7 +1700,7 @@ export class FreeformRenderer extends Component {
       if (target.classList.contains('icon-board-card-resize-handle')) return;
       if (target.classList.contains('icon-board-connection-handle')) return;
       if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.tagName === 'BUTTON') return;
-      if (target.getAttribute('contenteditable')) return;
+      if (target.closest('[contenteditable="true"]')) return;
       if (target.closest('a')) return;
       if (e.button !== 0) return;
 
@@ -1483,7 +1798,7 @@ export class FreeformRenderer extends Component {
             this.renderCardContent(el, updated as TileCard); this.bindCardEvents(el, updated as TileCard);
             this.cardEls.set(updated.id, el); await this.saveNow();
           }
-        }).open();
+        }, this.file).open();
       }));
     }
 
@@ -1491,10 +1806,69 @@ export class FreeformRenderer extends Component {
       menu.addItem(i => i.setTitle('Edit text').setIcon('pencil').onClick(() => this.editStickyInline(el, card)));
       menu.addSeparator();
       for (const { color, name } of STICKY_COLORS) {
-        menu.addItem(i => i.setTitle(name).onClick(() => {
+        menu.addItem(i => i.setTitle(name).setChecked(card.color === color).onClick(() => {
           this.pushUndo(); card.color = color; el.style.backgroundColor = color; this.scheduleSave();
         }));
       }
+      menu.addSeparator();
+      menu.addItem(i => i.setTitle('Align left').setChecked(!card.textAlign || card.textAlign === 'left').onClick(() => {
+        this.pushUndo(); card.textAlign = 'left'; this.renderCardContent(el, card); this.bindCardEvents(el, card); this.scheduleSave();
+      }));
+      menu.addItem(i => i.setTitle('Align center').setChecked(card.textAlign === 'center').onClick(() => {
+        this.pushUndo(); card.textAlign = 'center'; this.renderCardContent(el, card); this.bindCardEvents(el, card); this.scheduleSave();
+      }));
+      menu.addItem(i => i.setTitle('Align right').setChecked(card.textAlign === 'right').onClick(() => {
+        this.pushUndo(); card.textAlign = 'right'; this.renderCardContent(el, card); this.bindCardEvents(el, card); this.scheduleSave();
+      }));
+      menu.addItem(i => i.setTitle('Justify').setChecked(card.textAlign === 'justify').onClick(() => {
+        this.pushUndo(); card.textAlign = 'justify'; this.renderCardContent(el, card); this.bindCardEvents(el, card); this.scheduleSave();
+      }));
+      menu.addSeparator();
+      menu.addItem(i => i.setTitle('Text size: Small').setChecked(card.textScale === 'sm').onClick(() => {
+        this.pushUndo(); card.textScale = 'sm'; this.renderCardContent(el, card); this.bindCardEvents(el, card); this.scheduleSave();
+      }));
+      menu.addItem(i => i.setTitle('Text size: Medium').setChecked(!card.textScale || card.textScale === 'md').onClick(() => {
+        this.pushUndo(); card.textScale = 'md'; this.renderCardContent(el, card); this.bindCardEvents(el, card); this.scheduleSave();
+      }));
+      menu.addItem(i => i.setTitle('Text size: Large').setChecked(card.textScale === 'lg').onClick(() => {
+        this.pushUndo(); card.textScale = 'lg'; this.renderCardContent(el, card); this.bindCardEvents(el, card); this.scheduleSave();
+      }));
+      menu.addSeparator();
+      const TEXT_COLORS = [
+        { color: '#1f2937', name: 'Default' },
+        { color: '#dc2626', name: 'Red' },
+        { color: '#d97706', name: 'Amber' },
+        { color: '#16a34a', name: 'Green' },
+        { color: '#2563eb', name: 'Blue' },
+        { color: '#7c3aed', name: 'Purple' },
+        { color: '#db2777', name: 'Pink' },
+        { color: '#6b7280', name: 'Grey' },
+      ];
+      for (const { color, name } of TEXT_COLORS) {
+        menu.addItem(i => i.setTitle(`Text: ${name}`).setChecked(card.textColor === color || (!card.textColor && name === 'Default')).onClick(() => {
+          this.pushUndo();
+          card.textColor = name === 'Default' ? undefined : color;
+          this.renderCardContent(el, card); this.bindCardEvents(el, card); this.scheduleSave();
+        }));
+      }
+    }
+
+    if (card.kind === 'checklist') {
+      menu.addItem(i => i.setTitle('Add section header').setIcon('heading').onClick(() => {
+        const listEl = el.querySelector<HTMLElement>('.icon-board-checklist-list');
+        if (!listEl) return;
+        this.pushUndo();
+        const newItem: ChecklistItem = { id: crypto.randomUUID(), text: '', done: false, isHeader: true };
+        card.items.push(newItem);
+        const row = this.appendChecklistItem(listEl, card, newItem);
+        listEl.appendChild(row);
+        setTimeout(() => row.querySelector<HTMLElement>('.icon-board-checklist-item-input')?.focus(), 0);
+        this.scheduleSave();
+      }));
+      menu.addSeparator();
+      menu.addItem(i => i.setTitle('Change accent colour…').setIcon('palette').onClick(() => {
+        this.showAccentColorPopover(el, card);
+      }));
     }
 
     if (card.kind === 'note-link') {
@@ -1509,6 +1883,59 @@ export class FreeformRenderer extends Component {
     if (card.kind === 'image') {
       menu.addItem(i => i.setTitle('Choose from vault…').setIcon('folder-open').onClick(() => {
         new VaultImagePickerModal(this.app, (file) => {
+          this.pushUndo(); card.source = { type: 'vault', path: file.path };
+          this.renderCardContent(el, card); this.bindCardEvents(el, card); this.scheduleSave();
+        }).open();
+      }));
+      menu.addItem(i => i
+        .setTitle(card.captionHidden ? 'Show caption' : 'Hide caption')
+        .setIcon('type')
+        .onClick(() => {
+          this.pushUndo(); card.captionHidden = !card.captionHidden;
+          const wrap = el.querySelector<HTMLElement>('.icon-board-image-caption-wrap');
+          if (wrap) wrap.toggleClass('is-hidden', !!card.captionHidden);
+          this.scheduleSave();
+        }));
+      menu.addSeparator();
+      const applyCapStyle = () => {
+        const view = el.querySelector<HTMLElement>('.icon-board-image-caption-view');
+        const ta = el.querySelector<HTMLElement>('.icon-board-image-caption');
+        [view, ta].forEach(n => {
+          if (!n) return;
+          n.className = n.className.replace(/\btext-scale-\S+/g, '').trim();
+          if (card.captionScale) n.classList.add(`text-scale-${card.captionScale}`);
+          n.style.color = card.captionColor ?? '';
+        });
+        this.scheduleSave();
+      };
+      menu.addItem(i => i.setTitle('Caption size: Small').setChecked(card.captionScale === 'sm').onClick(() => {
+        this.pushUndo(); card.captionScale = 'sm'; applyCapStyle();
+      }));
+      menu.addItem(i => i.setTitle('Caption size: Medium').setChecked(!card.captionScale || card.captionScale === 'md').onClick(() => {
+        this.pushUndo(); card.captionScale = 'md'; applyCapStyle();
+      }));
+      menu.addItem(i => i.setTitle('Caption size: Large').setChecked(card.captionScale === 'lg').onClick(() => {
+        this.pushUndo(); card.captionScale = 'lg'; applyCapStyle();
+      }));
+      const CAPTION_COLORS = [
+        { color: '', name: 'Default' },
+        { color: '#dc2626', name: 'Red' },
+        { color: '#d97706', name: 'Amber' },
+        { color: '#16a34a', name: 'Green' },
+        { color: '#2563eb', name: 'Blue' },
+        { color: '#7c3aed', name: 'Purple' },
+        { color: '#6b7280', name: 'Grey' },
+      ];
+      for (const { color, name } of CAPTION_COLORS) {
+        menu.addItem(i => i.setTitle(`Caption: ${name}`).setChecked(card.captionColor === color || (!card.captionColor && !color)).onClick(() => {
+          this.pushUndo(); card.captionColor = color || undefined; applyCapStyle();
+        }));
+      }
+    }
+
+    if (card.kind === 'audio') {
+      menu.addItem(i => i.setTitle('Choose from vault…').setIcon('folder-open').onClick(() => {
+        new VaultAudioPickerModal(this.app, (file) => {
           this.pushUndo(); card.source = { type: 'vault', path: file.path };
           this.renderCardContent(el, card); this.bindCardEvents(el, card); this.scheduleSave();
         }).open();
@@ -1562,6 +1989,19 @@ export class FreeformRenderer extends Component {
       menu.addSeparator();
     }
 
+    const selIds = this.selection.getIds();
+    if (selIds.length > 1) {
+      menu.addSeparator();
+      menu.addItem(i => i.setTitle('Align left').setIcon('align-left').onClick(() => this.alignCards('left')));
+      menu.addItem(i => i.setTitle('Align center').setIcon('align-center').onClick(() => this.alignCards('center-h')));
+      menu.addItem(i => i.setTitle('Align right').setIcon('align-right').onClick(() => this.alignCards('right')));
+      menu.addItem(i => i.setTitle('Align top').setIcon('align-start-vertical').onClick(() => this.alignCards('top')));
+      menu.addItem(i => i.setTitle('Align middle').setIcon('align-center-vertical').onClick(() => this.alignCards('middle-v')));
+      menu.addItem(i => i.setTitle('Align bottom').setIcon('align-end-vertical').onClick(() => this.alignCards('bottom')));
+      menu.addItem(i => i.setTitle('Distribute horizontally').setIcon('arrows-left-right').onClick(() => this.alignCards('distribute-h')));
+      menu.addItem(i => i.setTitle('Distribute vertically').setIcon('arrows-up-down').onClick(() => this.alignCards('distribute-v')));
+    }
+
     menu.addItem(i => i.setTitle('Duplicate').setIcon('copy').onClick(() => this.duplicateSelected()));
     menu.addSeparator();
     menu.addItem(i => i.setTitle('Bring to front').setIcon('chevrons-up').onClick(() => {
@@ -1601,9 +2041,24 @@ export class FreeformRenderer extends Component {
       const { w: minW, h: minH } = cardMinSize(card.kind);
       el.setPointerCapture(e.pointerId);
 
+      // Compute aspect ratio for image cards from natural image dimensions or current size
+      let imgAspect: number | null = null;
+      if (card.kind === 'image') {
+        const imgEl = el.querySelector('.icon-board-image-img') as HTMLImageElement | null;
+        if (imgEl && imgEl.naturalWidth > 0 && imgEl.naturalHeight > 0) {
+          imgAspect = imgEl.naturalHeight / imgEl.naturalWidth;
+        } else {
+          imgAspect = startH / startW;
+        }
+      }
+
       const onMove = (e: PointerEvent) => {
         card.w = Math.max(minW, snap(startW + (e.clientX - sc.x) / this.vp.zoom));
-        card.h = Math.max(minH, snap(startH + (e.clientY - sc.y) / this.vp.zoom));
+        if (imgAspect !== null) {
+          card.h = Math.max(minH, snap(card.w * imgAspect));
+        } else {
+          card.h = Math.max(minH, snap(startH + (e.clientY - sc.y) / this.vp.zoom));
+        }
         el.style.width = `${card.w}px`; el.style.height = `${card.h}px`;
         if (card.kind === 'tile') {
           const tileSize = Math.max(40, Math.min(card.w - 20, card.h - 50 - 16));
@@ -1638,6 +2093,8 @@ export class FreeformRenderer extends Component {
 
     const meta = e.metaKey || e.ctrlKey;
     if (e.key === 'Escape') {
+      if (this.pendingTool) { this.clearPendingTool(); return; }
+      if (this.overflowPopover) { this.closeOverflow(); return; }
       if (this.connectMode) { this.exitConnectMode(); return; }
       if (this.selectedConnectionId) { this.deselectConnection(); return; }
       this.selection.clear(); this.refreshSelectionVisuals(); return;
@@ -1716,12 +2173,12 @@ export class FreeformRenderer extends Component {
       t.x = x; t.y = y; t.w = TILE_DEFAULT_W; t.h = TILE_DEFAULT_H; t.z = this.nextZ();
       this.pushUndo(); this.board.cards.push(t); await this.saveNow();
       this.createCardEl(t); this.selection.select(t.id); this.refreshSelectionVisuals();
-    }).open();
+    }, this.file).open();
   }
 
   private addSticky(): void { const p = this.centerPos(STICKY_DEFAULT_W, STICKY_DEFAULT_H); this.addStickyAt(p.x, p.y); }
   private addStickyAt(x: number, y: number, initialText = ''): void {
-    const card: StickyCard = { id: crypto.randomUUID(), kind: 'sticky', x, y, w: STICKY_DEFAULT_W, h: STICKY_DEFAULT_H, z: this.nextZ(), text: initialText, color: STICKY_COLORS[0].color };
+    const card: StickyCard = { id: crypto.randomUUID(), kind: 'sticky', x, y, w: STICKY_DEFAULT_W, h: STICKY_DEFAULT_H, z: this.nextZ(), text: initialText, color: this.defaultStickyColor ?? STICKY_COLORS[0].color };
     this.pushUndo(); this.board.cards.push(card); this.saveNow();
     const el = this.createCardEl(card);
     this.selection.select(card.id); this.refreshSelectionVisuals();
@@ -1730,7 +2187,7 @@ export class FreeformRenderer extends Component {
 
   private addChecklist(): void { const p = this.centerPos(CHECKLIST_DEFAULT_W, CHECKLIST_DEFAULT_H); this.addChecklistAt(p.x, p.y); }
   private addChecklistAt(x: number, y: number): void {
-    const card: ChecklistCard = { id: crypto.randomUUID(), kind: 'checklist', x, y, w: CHECKLIST_DEFAULT_W, h: CHECKLIST_DEFAULT_H, z: this.nextZ(), title: '', items: [], color: 'var(--background-secondary)' };
+    const card: ChecklistCard = { id: crypto.randomUUID(), kind: 'checklist', x, y, w: CHECKLIST_DEFAULT_W, h: CHECKLIST_DEFAULT_H, z: this.nextZ(), title: '', accentColor: '#EF4444', items: [], color: 'var(--background-primary)' };
     this.pushUndo(); this.board.cards.push(card); this.saveNow();
     const el = this.createCardEl(card);
     this.selection.select(card.id); this.refreshSelectionVisuals();
@@ -1750,6 +2207,15 @@ export class FreeformRenderer extends Component {
   private addImageAt(x: number, y: number): void {
     new VaultImagePickerModal(this.app, (file) => {
       const card: ImageCard = { id: crypto.randomUUID(), kind: 'image', x, y, w: IMAGE_DEFAULT_W, h: IMAGE_DEFAULT_H, z: this.nextZ(), source: { type: 'vault', path: file.path } };
+      this.pushUndo(); this.board.cards.push(card); this.saveNow();
+      this.createCardEl(card); this.selection.select(card.id); this.refreshSelectionVisuals();
+    }).open();
+  }
+
+  private addAudio(): void { const p = this.centerPos(AUDIO_DEFAULT_W, AUDIO_DEFAULT_H); this.addAudioAt(p.x, p.y); }
+  private addAudioAt(x: number, y: number): void {
+    new VaultAudioPickerModal(this.app, (file) => {
+      const card: AudioCard = { id: crypto.randomUUID(), kind: 'audio', x, y, w: AUDIO_DEFAULT_W, h: AUDIO_DEFAULT_H, z: this.nextZ(), source: { type: 'vault', path: file.path } };
       this.pushUndo(); this.board.cards.push(card); this.saveNow();
       this.createCardEl(card); this.selection.select(card.id); this.refreshSelectionVisuals();
     }).open();
@@ -1825,10 +2291,94 @@ export class FreeformRenderer extends Component {
     this.scheduleSave();
   }
 
-  private isImageDrag(e: DragEvent): boolean {
+  private async handleDroppedAudioToKanban(file: File, card: KanbanColumnCard, itemsEl: HTMLElement): Promise<void> {
+    await this.ensureFolder(this.attachmentFolder);
+    const ext = file.name.endsWith('.mp3') ? 'mp3' : 'wav';
+    const base = file.name.replace(/\.[^.]+$/, '').replace(/\s+/g, '-');
+    const path = `${this.attachmentFolder}/${base}-${Date.now()}.${ext}`;
+    try {
+      await this.app.vault.adapter.writeBinary(path, await file.arrayBuffer());
+    } catch { new Notice(`Failed to save ${file.name}.`); return; }
+    this.addKanbanAudioItem(path, card, itemsEl);
+  }
+
+  private addKanbanAudioItem(audioPath: string, card: KanbanColumnCard, itemsEl: HTMLElement): void {
+    this.pushUndo();
+    const item: KanbanItem = { id: crypto.randomUUID(), text: '', audioPath };
+    card.items.push(item);
+    this.appendKanbanItem(itemsEl, card, item);
+    const cardEl = this.cardEls.get(card.id);
+    if (cardEl) this.updateKanbanCount(card, cardEl);
+    this.scheduleSave();
+  }
+
+  private isDropAccepted(e: DragEvent): boolean {
     if (e.dataTransfer?.types.includes('Files')) return true;
     const draggable = (this.app as any).dragManager?.draggable;
-    return draggable?.type === 'file' && IMAGE_EXTS.includes(draggable.file?.extension?.toLowerCase() ?? '');
+    if (draggable?.type !== 'file' || !draggable.file) return false;
+    const ext = draggable.file?.extension?.toLowerCase() ?? '';
+    return IMAGE_EXTS.includes(ext) || AUDIO_EXTS.includes(ext);
+  }
+
+  private async handleDroppedAudio(file: File, x: number, y: number): Promise<void> {
+    await this.ensureFolder(this.attachmentFolder);
+    const ext = file.name.endsWith('.mp3') ? 'mp3' : 'wav';
+    const base = file.name.replace(/\.[^.]+$/, '').replace(/\s+/g, '-');
+    const path = `${this.attachmentFolder}/${base}-${Date.now()}.${ext}`;
+    try {
+      await this.app.vault.adapter.writeBinary(path, await file.arrayBuffer());
+    } catch { new Notice(`Failed to save ${file.name}.`); return; }
+    const card: AudioCard = { id: crypto.randomUUID(), kind: 'audio', x, y, w: AUDIO_DEFAULT_W, h: AUDIO_DEFAULT_H, z: this.nextZ(), source: { type: 'vault', path } };
+    this.pushUndo(); this.board.cards.push(card); await this.saveNow();
+    this.createCardEl(card); this.selection.select(card.id); this.refreshSelectionVisuals();
+  }
+
+  private alignCards(mode: 'left' | 'center-h' | 'right' | 'top' | 'middle-v' | 'bottom' | 'distribute-h' | 'distribute-v'): void {
+    const ids = this.selection.getIds();
+    const cards = ids.map(id => this.board.cards.find(c => c.id === id)).filter((c): c is Card => !!c);
+    if (cards.length < 2) return;
+    this.pushUndo();
+    if (mode === 'left') {
+      const ref = Math.min(...cards.map(c => c.x ?? 0));
+      for (const c of cards) c.x = ref;
+    } else if (mode === 'center-h') {
+      const cx = cards.reduce((s, c) => s + (c.x ?? 0) + (c.w ?? 0) / 2, 0) / cards.length;
+      for (const c of cards) c.x = cx - (c.w ?? 0) / 2;
+    } else if (mode === 'right') {
+      const ref = Math.max(...cards.map(c => (c.x ?? 0) + (c.w ?? 0)));
+      for (const c of cards) c.x = ref - (c.w ?? 0);
+    } else if (mode === 'top') {
+      const ref = Math.min(...cards.map(c => c.y ?? 0));
+      for (const c of cards) c.y = ref;
+    } else if (mode === 'middle-v') {
+      const cy = cards.reduce((s, c) => s + (c.y ?? 0) + (c.h ?? 0) / 2, 0) / cards.length;
+      for (const c of cards) c.y = cy - (c.h ?? 0) / 2;
+    } else if (mode === 'bottom') {
+      const ref = Math.max(...cards.map(c => (c.y ?? 0) + (c.h ?? 0)));
+      for (const c of cards) c.y = ref - (c.h ?? 0);
+    } else if (mode === 'distribute-h') {
+      const sorted = [...cards].sort((a, b) => (a.x ?? 0) - (b.x ?? 0));
+      const left = sorted[0].x ?? 0;
+      const right = (sorted[sorted.length - 1].x ?? 0) + (sorted[sorted.length - 1].w ?? 0);
+      const totalW = cards.reduce((s, c) => s + (c.w ?? 0), 0);
+      const gap = (right - left - totalW) / (cards.length - 1);
+      let x = left;
+      for (const c of sorted) { c.x = x; x += (c.w ?? 0) + gap; }
+    } else if (mode === 'distribute-v') {
+      const sorted = [...cards].sort((a, b) => (a.y ?? 0) - (b.y ?? 0));
+      const top = sorted[0].y ?? 0;
+      const bottom = (sorted[sorted.length - 1].y ?? 0) + (sorted[sorted.length - 1].h ?? 0);
+      const totalH = cards.reduce((s, c) => s + (c.h ?? 0), 0);
+      const gap = (bottom - top - totalH) / (cards.length - 1);
+      let y = top;
+      for (const c of sorted) { c.y = y; y += (c.h ?? 0) + gap; }
+    }
+    for (const c of cards) {
+      const cardEl = this.cardEls.get(c.id);
+      if (cardEl) { cardEl.style.left = `${c.x}px`; cardEl.style.top = `${c.y}px`; }
+    }
+    this.refreshAllConnections();
+    this.scheduleSave();
   }
 
   // ── Delete & duplicate ─────────────────────────────────────────
@@ -1897,27 +2447,126 @@ export class FreeformRenderer extends Component {
     this.refreshAllConnections();
   }
 
+  // ── Tool placement ─────────────────────────────────────────────
+
+  private activateTool(name: string, btn: HTMLElement): void {
+    if (this.pendingTool === name) { this.clearPendingTool(); return; }
+    this.clearPendingTool();
+    this.pendingTool = name;
+    this.pendingToolBtn = btn;
+    btn.addClass('is-active');
+    this.outer.style.cursor = 'crosshair';
+  }
+
+  private clearPendingTool(): void {
+    this.pendingToolBtn?.removeClass('is-active');
+    this.pendingTool = null;
+    this.pendingToolBtn = null;
+    if (!this.connectMode) this.outer.style.cursor = '';
+  }
+
+  private placePendingTool(cx: number, cy: number): void {
+    const tool = this.pendingTool;
+    this.clearPendingTool();
+    this.closeOverflow();
+    if (!tool) return;
+    const s = snap;
+    switch (tool) {
+      case 'sticky':
+        this.addStickyAt(s(cx - STICKY_DEFAULT_W / 2), s(cy - STICKY_DEFAULT_H / 2)); break;
+      case 'checklist':
+        this.addChecklistAt(s(cx - CHECKLIST_DEFAULT_W / 2), s(cy - CHECKLIST_DEFAULT_H / 2)); break;
+      case 'kanban':
+        this.addKanbanAt(s(cx - KANBAN_DEFAULT_W / 2), s(cy - KANBAN_DEFAULT_H / 2)); break;
+      case 'image':
+        this.addImageAt(s(cx - IMAGE_DEFAULT_W / 2), s(cy - IMAGE_DEFAULT_H / 2)); break;
+      case 'audio':
+        this.addAudioAt(s(cx - AUDIO_DEFAULT_W / 2), s(cy - AUDIO_DEFAULT_H / 2)); break;
+      case 'bookmark':
+        this.addBookmarkAt(s(cx - BOOKMARK_DEFAULT_W / 2), s(cy - BOOKMARK_DEFAULT_H / 2)); break;
+      case 'notelink':
+        this.addNoteLinkAt(s(cx - NOTELINK_DEFAULT_W / 2), s(cy - NOTELINK_DEFAULT_H / 2)); break;
+      case 'tile':
+        this.addTileAt(s(cx - TILE_DEFAULT_W / 2), s(cy - TILE_DEFAULT_H / 2)); break;
+      case 'tile-board':
+        new TileModal(this.app, null, async (t) => {
+          t.x = s(cx - TILE_DEFAULT_W / 2); t.y = s(cy - TILE_DEFAULT_H / 2);
+          t.w = TILE_DEFAULT_W; t.h = TILE_DEFAULT_H; t.z = this.nextZ();
+          this.pushUndo(); this.board.cards.push(t); await this.saveNow();
+          this.createCardEl(t); this.selection.select(t.id); this.refreshSelectionVisuals();
+        }, this.file, 'board').open(); break;
+      case 'tile-folder':
+        new TileModal(this.app, null, async (t) => {
+          t.x = s(cx - TILE_DEFAULT_W / 2); t.y = s(cy - TILE_DEFAULT_H / 2);
+          t.w = TILE_DEFAULT_W; t.h = TILE_DEFAULT_H; t.z = this.nextZ();
+          this.pushUndo(); this.board.cards.push(t); await this.saveNow();
+          this.createCardEl(t); this.selection.select(t.id); this.refreshSelectionVisuals();
+        }, this.file, 'folder').open(); break;
+      case 'tile-canvas':
+        new TileModal(this.app, null, async (t) => {
+          t.x = s(cx - TILE_DEFAULT_W / 2); t.y = s(cy - TILE_DEFAULT_H / 2);
+          t.w = TILE_DEFAULT_W; t.h = TILE_DEFAULT_H; t.z = this.nextZ();
+          this.pushUndo(); this.board.cards.push(t); await this.saveNow();
+          this.createCardEl(t); this.selection.select(t.id); this.refreshSelectionVisuals();
+        }, this.file, 'canvas').open(); break;
+      case 'tile-note':
+        new TileModal(this.app, null, async (t) => {
+          t.x = s(cx - TILE_DEFAULT_W / 2); t.y = s(cy - TILE_DEFAULT_H / 2);
+          t.w = TILE_DEFAULT_W; t.h = TILE_DEFAULT_H; t.z = this.nextZ();
+          this.pushUndo(); this.board.cards.push(t); await this.saveNow();
+          this.createCardEl(t); this.selection.select(t.id); this.refreshSelectionVisuals();
+        }, this.file, 'note').open(); break;
+    }
+  }
+
   // ── Toolbar ────────────────────────────────────────────────────
 
   private renderToolbar(): void {
     const tb = this.toolbarEl = this.container.createDiv('icon-board-freeform-toolbar');
+    tb.addClass(`tb-pos-${this.toolbarPosition}`);
 
-    // Buttons wrapper (collapses to FAB on narrow screens)
-    const btnsEl = tb.createDiv('icon-board-freeform-toolbar-btns');
-    const close = () => this.closeFab();
-    this.addToolbarBtn(btnsEl, 'Tile',      'layout-grid',  () => { this.addTile();      close(); });
-    this.addToolbarBtn(btnsEl, 'Sticky',    'sticky-note',  () => { this.addSticky();    close(); });
-    this.addToolbarBtn(btnsEl, 'Checklist', 'check-square', () => { this.addChecklist(); close(); });
-    this.addToolbarBtn(btnsEl, 'Note Link', 'file-text',    () => { this.addNoteLink();  close(); });
-    this.addToolbarBtn(btnsEl, 'Image',     'image',        () => { this.addImage();     close(); });
-    this.addToolbarBtn(btnsEl, 'Bookmark',  'bookmark',     () => { this.addBookmark();  close(); });
-    this.connectToolBtn = this.addToolbarBtn(btnsEl, 'Connect', 'share-2', () => {
-      this.toggleConnectMode(); close();
+    // ── Primary buttons ──
+    const mkBtn = (label: string, icon: string, tool: string, onClick?: () => void): HTMLElement => {
+      const btn = tb.createDiv('icon-board-tb-btn');
+      btn.setAttribute('tabindex', '0'); btn.setAttribute('aria-label', label);
+      const iconEl = btn.createDiv('icon-board-tb-btn-icon');
+      setIcon(iconEl, icon);
+      btn.createEl('span', { text: label, cls: 'icon-board-tb-btn-label' });
+      const handler = onClick ?? (() => this.activateTool(tool, btn));
+      btn.addEventListener('click', handler);
+      btn.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handler(); } });
+      return btn;
+    };
+
+    mkBtn('Tile',    'layout-template', 'tile-canvas');
+    mkBtn('Note',    'sticky-note',  'sticky');
+    mkBtn('Link',    'link',         'bookmark');
+    mkBtn('To-do',   'list-checks',  'checklist');
+    this.connectToolBtn = mkBtn('Line', 'arrow-up-right', 'connect', () => this.toggleConnectMode());
+    mkBtn('Board',   'layout-grid',  'tile-board');
+    mkBtn('Column',  'columns-3',    'kanban');
+
+    // ── Dots toggle ──
+    this.dotsToggleBtn = mkBtn('Dots', 'grid-2x2', 'dots', () => {
+      this.board.dotsHidden = !this.board.dotsHidden;
+      this.outer.toggleClass('no-dots', !!this.board.dotsHidden);
+      this.dotsToggleBtn?.toggleClass('is-active', !this.board.dotsHidden);
+      this.scheduleSave();
     });
-    this.addToolbarBtn(btnsEl, 'Kanban', 'columns-3', () => { this.addKanban(); close(); });
+    this.dotsToggleBtn.toggleClass('is-active', !this.board.dotsHidden);
 
-    // FAB toggle — only shown on narrow screens via CSS
-    const fab = tb.createDiv('icon-board-freeform-toolbar-fab');
+    // ── Overflow separator + button ──
+    tb.createDiv('icon-board-tb-overflow-sep');
+    const overflowBtn = tb.createDiv('icon-board-tb-btn icon-board-tb-overflow-btn');
+    overflowBtn.setAttribute('tabindex', '0'); overflowBtn.setAttribute('aria-label', 'More…');
+    overflowBtn.setText('···');
+    overflowBtn.addEventListener('click', (e) => { e.stopPropagation(); this.toggleOverflow(overflowBtn); });
+    overflowBtn.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); this.toggleOverflow(overflowBtn); }
+    });
+
+    // ── Mobile FAB ──
+    const fab = this.fabEl = tb.createDiv('icon-board-freeform-toolbar-fab');
     fab.setAttribute('aria-label', 'Add card');
     setIcon(fab, 'plus');
     fab.addEventListener('click', (e) => {
@@ -1928,21 +2577,132 @@ export class FreeformRenderer extends Component {
     });
   }
 
-  private closeFab(): void {
-    if (!this.toolbarEl?.hasClass('is-open')) return;
-    this.toolbarEl.removeClass('is-open');
-    const fab = this.toolbarEl.querySelector('.icon-board-freeform-toolbar-fab') as HTMLElement | null;
-    if (fab) { fab.empty(); setIcon(fab, 'plus'); }
+  private toggleOverflow(anchor: HTMLElement): void {
+    if (this.overflowPopover) { this.closeOverflow(); return; }
+
+    const pop = this.overflowPopover = this.container.createDiv('icon-board-tb-overflow');
+    const mkOv = (label: string, icon: string, tool: string) => {
+      const btn = pop.createDiv('icon-board-tb-overflow-item');
+      btn.setAttribute('tabindex', '0');
+      const iconEl = btn.createDiv('icon-board-tb-overflow-icon');
+      setIcon(iconEl, icon);
+      btn.createSpan({ text: label });
+      const handler = () => { this.closeOverflow(); this.activateTool(tool, btn); };
+      btn.addEventListener('click', handler);
+      btn.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handler(); } });
+    };
+    mkOv('Image',        'image',      'image');
+    mkOv('Audio',        'music',      'audio');
+    mkOv('Note Link',    'file-text',  'notelink');
+    mkOv('Tile — Note',  'file',       'tile-note');
+    mkOv('Tile — Canvas','layout-template', 'tile-canvas');
+    mkOv('Tile — Folder','folder',     'tile-folder');
+
+    pop.createDiv('icon-board-tb-overflow-sep');
+
+    // Dots toggle inside overflow
+    const dotsItem = pop.createDiv('icon-board-tb-overflow-item');
+    dotsItem.setAttribute('tabindex', '0');
+    const dotsIcon = dotsItem.createDiv('icon-board-tb-overflow-icon');
+    setIcon(dotsIcon, 'grid-2x2');
+    dotsItem.createSpan({ text: this.board.dotsHidden ? 'Show dots' : 'Hide dots' });
+    dotsItem.toggleClass('is-active', !this.board.dotsHidden);
+    dotsItem.addEventListener('click', () => {
+      this.board.dotsHidden = !this.board.dotsHidden;
+      this.outer.toggleClass('no-dots', !!this.board.dotsHidden);
+      dotsItem.setText(this.board.dotsHidden ? 'Show dots' : 'Hide dots');
+      dotsItem.toggleClass('is-active', !this.board.dotsHidden);
+      this.scheduleSave();
+      this.closeOverflow();
+    });
+
+    // Position the overflow relative to the anchor based on toolbar side
+    const aRect = anchor.getBoundingClientRect();
+    const cRect = this.container.getBoundingClientRect();
+    if (this.toolbarPosition === 'right') {
+      pop.style.top  = `${aRect.top - cRect.top}px`;
+      pop.style.right = `${cRect.right - aRect.left + 8}px`;
+    } else if (this.toolbarPosition === 'bottom') {
+      pop.style.bottom = `${cRect.bottom - aRect.top + 8}px`;
+      pop.style.left   = `${aRect.left - cRect.left}px`;
+    } else if (this.toolbarPosition === 'top') {
+      pop.style.top  = `${aRect.bottom - cRect.top + 8}px`;
+      pop.style.left = `${aRect.left - cRect.left}px`;
+    } else {
+      pop.style.top  = `${aRect.top - cRect.top}px`;
+      pop.style.left = `${aRect.right - cRect.left + 8}px`;
+    }
+
+    // Dismiss on outside click
+    const onOutside = (e: MouseEvent) => {
+      if (!pop.contains(e.target as Node) && e.target !== anchor) {
+        this.closeOverflow();
+        document.removeEventListener('mousedown', onOutside);
+      }
+    };
+    setTimeout(() => document.addEventListener('mousedown', onOutside), 0);
   }
 
-  private addToolbarBtn(tb: HTMLElement, label: string, icon: string, onClick: () => void): HTMLElement {
-    const btn = tb.createDiv('icon-board-freeform-toolbar-btn');
-    btn.setAttribute('tabindex', '0'); btn.setAttribute('aria-label', label);
-    setIcon(btn.createDiv('icon-board-freeform-toolbar-btn-icon'), icon);
-    btn.createEl('span', { text: label, cls: 'icon-board-freeform-toolbar-btn-label' });
-    btn.addEventListener('click', onClick);
-    btn.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onClick(); } });
-    return btn;
+  private closeOverflow(): void {
+    this.overflowPopover?.remove();
+    this.overflowPopover = null;
+  }
+
+  private closeFab(): void {
+    if (!this.toolbarEl.hasClass('is-open')) return;
+    this.toolbarEl.removeClass('is-open');
+    if (this.fabEl) { this.fabEl.empty(); setIcon(this.fabEl, 'plus'); }
+  }
+
+  // ── Accent colour popover (checklist) ─────────────────────────
+
+  private showAccentColorPopover(cardEl: HTMLElement, card: ChecklistCard): void {
+    const existing = this.container.querySelector<HTMLElement>('.icon-board-accent-pop');
+    if (existing) { existing.remove(); return; }
+
+    const pop = this.container.createDiv('icon-board-accent-pop');
+
+    const palette = pop.createDiv('icon-board-accent-pop-palette');
+    const ACCENT_COLORS = [
+      '#EF4444', '#F59E0B', '#EAB308', '#84CC16',
+      '#10B981', '#06B6D4', '#3B82F6', '#8B5CF6',
+      '#EC4899', '#64748B', '#44403C', '#FFFFFF',
+    ];
+    for (const hex of ACCENT_COLORS) {
+      const sw = palette.createDiv('icon-board-accent-pop-swatch');
+      sw.style.backgroundColor = hex;
+      if (hex === card.accentColor) sw.addClass('is-selected');
+      if (hex === '#FFFFFF') sw.addClass('has-border');
+      sw.addEventListener('click', () => {
+        this.pushUndo(); card.accentColor = hex;
+        cardEl.querySelector<HTMLElement>('.icon-board-checklist-accent')!.style.backgroundColor = hex;
+        this.scheduleSave(); pop.remove();
+      });
+    }
+
+    const hexRow = pop.createDiv('icon-board-accent-pop-hex-row');
+    const hexInput = hexRow.createEl('input', { cls: 'icon-board-accent-pop-hex', type: 'text', placeholder: '#EF4444' });
+    hexInput.value = card.accentColor;
+    hexInput.addEventListener('pointerdown', e => e.stopPropagation());
+    hexInput.addEventListener('change', () => {
+      const val = hexInput.value.trim();
+      if (/^#[0-9a-fA-F]{6}$/.test(val)) {
+        this.pushUndo(); card.accentColor = val;
+        cardEl.querySelector<HTMLElement>('.icon-board-checklist-accent')!.style.backgroundColor = val;
+        this.scheduleSave(); pop.remove();
+      }
+    });
+
+    // Position popover near the card
+    const cRect = this.container.getBoundingClientRect();
+    const eRect = cardEl.getBoundingClientRect();
+    pop.style.top  = `${eRect.bottom - cRect.top + 6}px`;
+    pop.style.left = `${eRect.left - cRect.left}px`;
+
+    const dismiss = (e: MouseEvent) => {
+      if (!pop.contains(e.target as Node)) { pop.remove(); document.removeEventListener('mousedown', dismiss); }
+    };
+    setTimeout(() => document.addEventListener('mousedown', dismiss), 0);
   }
 
   // ── Zoom pill ──────────────────────────────────────────────────
@@ -1952,6 +2712,47 @@ export class FreeformRenderer extends Component {
     this.zoomPill.setAttribute('title', 'Click to reset zoom to 100%');
     this.zoomPill.setText(`${Math.round(this.vp.zoom * 100)}%`);
     this.zoomPill.addEventListener('click', () => { this.vp = { x: 0, y: 0, zoom: 1 }; this.applyViewport(); this.scheduleSave(); });
+  }
+
+  // ── Alignment bar ──────────────────────────────────────────────
+
+  private renderAlignBar(): void {
+    this.alignBarEl = this.container.createDiv('icon-board-align-bar');
+
+    type AlignMode = Parameters<FreeformRenderer['alignCards']>[0];
+    // H group: horizontal alignment — adjusts X positions
+    const ALIGN_BTNS: { icon: string; title: string; mode: AlignMode }[] = [
+      { icon: 'align-left',      title: 'Align left edges',        mode: 'left'        },
+      { icon: 'align-center',    title: 'Center horizontally',     mode: 'center-h'    },
+      { icon: 'align-right',     title: 'Align right edges',       mode: 'right'       },
+      { icon: 'move-horizontal', title: 'Distribute horizontally', mode: 'distribute-h'},
+    ];
+    // V group: vertical alignment — adjusts Y positions
+    const VALIGN_BTNS: { icon: string; title: string; mode: AlignMode }[] = [
+      { icon: 'align-start-vertical',  title: 'Align top edges',       mode: 'top'         },
+      { icon: 'align-center-vertical', title: 'Center vertically',     mode: 'middle-v'    },
+      { icon: 'align-end-vertical',    title: 'Align bottom edges',    mode: 'bottom'      },
+      { icon: 'move-vertical',         title: 'Distribute vertically', mode: 'distribute-v'},
+    ];
+
+    const makeBtn = (parent: HTMLElement, icon: string, title: string, mode: AlignMode) => {
+      const btn = parent.createDiv('icon-board-align-bar-btn');
+      btn.setAttribute('title', title);
+      setIcon(btn, icon);
+      btn.addEventListener('click', () => this.alignCards(mode));
+    };
+
+    const hGroup = this.alignBarEl.createDiv('icon-board-align-bar-group');
+    const hLabel = hGroup.createSpan('icon-board-align-bar-label');
+    hLabel.setText('H');
+    for (const { icon, title, mode } of VALIGN_BTNS) makeBtn(hGroup, icon, title, mode);
+
+    this.alignBarEl.createDiv('icon-board-align-bar-sep');
+
+    const vGroup = this.alignBarEl.createDiv('icon-board-align-bar-group');
+    const vLabel = vGroup.createSpan('icon-board-align-bar-label');
+    vLabel.setText('V');
+    for (const { icon, title, mode } of ALIGN_BTNS) makeBtn(vGroup, icon, title, mode);
   }
 
   // ── Connection layer ───────────────────────────────────────────

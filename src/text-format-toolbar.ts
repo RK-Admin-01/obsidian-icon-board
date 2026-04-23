@@ -1,0 +1,235 @@
+// Storage format:
+// Text colour  → <span style="color:#hex">…</span>
+// Highlight    → <mark style="background:#hex">…</mark>
+// These are the only two HTML tags this toolbar writes. They live inline in the sticky
+// card's HTML field. Obsidian's MarkdownRenderer passes inline HTML through on render.
+// Same-type wrappers are always flattened before a new one is applied (no nesting).
+
+import { setIcon } from 'obsidian';
+
+const TEXT_COLORS: (string | null)[] = [
+  null,      // Default — removes colour
+  '#EF4444', '#F59E0B', '#10B981',
+  '#3B82F6', '#8B5CF6', '#EC4899',
+];
+
+const HIGHLIGHT_COLORS: (string | null)[] = [
+  null,      // None — removes highlight
+  '#000000', '#67E8F9', '#BEF264',
+  '#FCD34D', '#F9A8D4', '#D1D5DB',
+];
+
+export class TextFormatToolbar {
+  private popover:     HTMLElement | null = null;
+  private debounce:    number | null = null;
+  private savedRange:  Range | null = null;
+
+  private readonly onSelChange: () => void;
+  private readonly onOutside:   (e: MouseEvent) => void;
+
+  constructor(
+    private readonly editor:    HTMLElement,   // contenteditable div
+    private readonly cardEl:    HTMLElement,
+    private readonly container: HTMLElement,
+  ) {
+    this.onSelChange = () => this.scheduleCheck();
+    this.onOutside   = (e: MouseEvent) => {
+      if (this.popover && !this.popover.contains(e.target as Node)) this.dismiss();
+    };
+    document.addEventListener('selectionchange', this.onSelChange);
+  }
+
+  // ── Selection check ────────────────────────────────────────────
+
+  private scheduleCheck(): void {
+    if (this.debounce !== null) window.clearTimeout(this.debounce);
+    this.debounce = window.setTimeout(() => {
+      this.debounce = null;
+      const sel = window.getSelection();
+      if (!sel || sel.isCollapsed) { this.dismiss(); return; }
+      if (!this.editor.contains(sel.anchorNode) || !this.editor.contains(sel.focusNode)) {
+        this.dismiss(); return;
+      }
+      this.savedRange = sel.getRangeAt(0).cloneRange();
+      if (!this.popover) this.show();
+    }, 100);
+  }
+
+  // ── Popover ────────────────────────────────────────────────────
+
+  private show(): void {
+    const pop = this.popover = this.container.createDiv('icon-board-text-fmt-toolbar');
+    pop.addEventListener('pointerdown', e => e.preventDefault()); // keep editor focus + selection
+
+    this.buildFormatRow(pop);
+    pop.createDiv('icon-board-text-fmt-divider');
+    this.buildSection(pop, 'Color',     TEXT_COLORS,      hex => this.applyColor(hex),     'color');
+    pop.createDiv('icon-board-text-fmt-divider');
+    this.buildSection(pop, 'Highlight', HIGHLIGHT_COLORS, hex => this.applyHighlight(hex), 'highlight');
+
+    this.position(pop);
+    setTimeout(() => document.addEventListener('mousedown', this.onOutside), 0);
+  }
+
+  private buildFormatRow(parent: HTMLElement): void {
+    const row = parent.createDiv('icon-board-text-fmt-inline-row');
+    const mkBtn = (label: string, cmd: string) => {
+      const btn = row.createDiv('icon-board-text-fmt-inline-btn');
+      btn.setText(label);
+      btn.setAttribute('title', cmd === 'bold' ? 'Bold' : cmd === 'italic' ? 'Italic' : 'Strikethrough');
+      btn.addEventListener('click', () => {
+        this.restoreSelection();
+        document.execCommand(cmd, false);
+      });
+    };
+    mkBtn('B', 'bold');
+    mkBtn('I', 'italic');
+    mkBtn('S', 'strikeThrough');
+  }
+
+  private buildSection(
+    parent: HTMLElement,
+    label:  string,
+    colors: (string | null)[],
+    apply:  (hex: string | null) => void,
+    kind:   'color' | 'highlight',
+  ): void {
+    const section = parent.createDiv('icon-board-text-fmt-section');
+    section.createEl('span', { text: label, cls: 'icon-board-text-fmt-label' });
+    const row = section.createDiv('icon-board-text-fmt-swatches');
+
+    // Colour-wheel swatch (opens native picker)
+    const customSw = row.createDiv('icon-board-text-fmt-swatch');
+    customSw.addClass('is-custom');
+    setIcon(customSw, 'pipette');
+    const colorInput = customSw.createEl('input') as HTMLInputElement;
+    colorInput.type = 'color';
+    colorInput.className = 'icon-board-text-fmt-custom-input';
+    colorInput.addEventListener('pointerdown', e => e.stopPropagation());
+    colorInput.addEventListener('change', () => { apply(colorInput.value); this.dismiss(); });
+    customSw.addEventListener('click', () => { this.restoreSelection(); colorInput.click(); });
+
+    // Preset swatches
+    for (const hex of colors) {
+      const sw = row.createDiv('icon-board-text-fmt-swatch');
+      if (hex === null) {
+        sw.addClass(kind === 'color' ? 'is-default' : 'is-none');
+        sw.createEl('span', { text: kind === 'color' ? 'A' : '/', cls: 'icon-board-text-fmt-null-label' });
+      } else {
+        sw.style.backgroundColor = hex;
+        if (hex === '#000000') {
+          sw.createEl('span', { text: 'A', cls: 'icon-board-text-fmt-black-label' });
+        }
+      }
+      sw.addEventListener('click', () => { apply(hex); this.dismiss(); });
+    }
+  }
+
+  // ── Positioning (above the actual selected text) ───────────────
+
+  private position(pop: HTMLElement): void {
+    pop.style.visibility = 'hidden';
+    requestAnimationFrame(() => {
+      if (!this.popover || !this.savedRange) return;
+
+      const rects   = this.savedRange.getClientRects();
+      const contRect = this.container.getBoundingClientRect();
+      const popW    = pop.offsetWidth;
+      const popH    = pop.offsetHeight;
+      const contW   = this.container.clientWidth;
+
+      let selLeft: number, selRight: number, selTop: number, selBottom: number;
+      if (rects.length > 0) {
+        selLeft   = rects[0].left;
+        selRight  = rects[rects.length - 1].right;
+        selTop    = Math.min(...Array.from(rects).map(r => r.top));
+        selBottom = Math.max(...Array.from(rects).map(r => r.bottom));
+      } else {
+        const fb = this.cardEl.getBoundingClientRect();
+        selLeft = fb.left; selRight = fb.right;
+        selTop  = fb.top;  selBottom = fb.bottom;
+      }
+
+      let left = (selLeft + selRight) / 2 - contRect.left - popW / 2;
+      let top  = selTop  - contRect.top  - popH - 8;
+
+      if (top < 4) top = selBottom - contRect.top + 8; // flip below
+      if (left < 4) left = 4;
+      if (left + popW > contW - 4) left = contW - 4 - popW;
+
+      pop.style.top  = `${top}px`;
+      pop.style.left = `${left}px`;
+      pop.style.visibility = '';
+    });
+  }
+
+  // ── Apply formatting ───────────────────────────────────────────
+
+  private applyColor(hex: string | null): void {
+    this.restoreSelection();
+    const sel = window.getSelection();
+    if (!sel || !sel.rangeCount) return;
+    const range = sel.getRangeAt(0);
+    if (range.collapsed) return;
+    if (hex === null) this.unwrapRange(range, 'span');
+    else { const s = document.createElement('span'); s.style.color = hex; this.wrapRange(range, s); }
+    sel.removeAllRanges();
+  }
+
+  private applyHighlight(hex: string | null): void {
+    this.restoreSelection();
+    const sel = window.getSelection();
+    if (!sel || !sel.rangeCount) return;
+    const range = sel.getRangeAt(0);
+    if (range.collapsed) return;
+    if (hex === null) this.unwrapRange(range, 'mark');
+    else { const m = document.createElement('mark'); m.style.background = hex; this.wrapRange(range, m); }
+    sel.removeAllRanges();
+  }
+
+  private restoreSelection(): void {
+    if (!this.savedRange) return;
+    const sel = window.getSelection();
+    if (!sel) return;
+    sel.removeAllRanges();
+    sel.addRange(this.savedRange.cloneRange());
+  }
+
+  // ── DOM range helpers ──────────────────────────────────────────
+
+  private wrapRange(range: Range, wrapper: HTMLElement): void {
+    const tag = wrapper.tagName.toLowerCase();
+    // Extract selection, flatten any same-type tags inside, then rewrap
+    const extracted = range.extractContents();
+    const tmp = document.createElement('div');
+    tmp.appendChild(extracted);
+    tmp.querySelectorAll(tag).forEach(el => el.replaceWith(...Array.from(el.childNodes)));
+    while (tmp.firstChild) wrapper.appendChild(tmp.firstChild);
+    range.insertNode(wrapper);
+    wrapper.parentElement?.normalize();
+  }
+
+  private unwrapRange(range: Range, tag: string): void {
+    const extracted = range.extractContents();
+    const tmp = document.createElement('div');
+    tmp.appendChild(extracted);
+    tmp.querySelectorAll(tag).forEach(el => el.replaceWith(...Array.from(el.childNodes)));
+    const frag = document.createDocumentFragment();
+    while (tmp.firstChild) frag.appendChild(tmp.firstChild);
+    range.insertNode(frag);
+  }
+
+  // ── Lifecycle ──────────────────────────────────────────────────
+
+  dismiss(): void {
+    this.popover?.remove();
+    this.popover = null;
+    document.removeEventListener('mousedown', this.onOutside);
+  }
+
+  destroy(): void {
+    if (this.debounce !== null) window.clearTimeout(this.debounce);
+    this.dismiss();
+    document.removeEventListener('selectionchange', this.onSelChange);
+  }
+}

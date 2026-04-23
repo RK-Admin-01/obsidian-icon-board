@@ -24,6 +24,8 @@ export interface IconBoardSettings {
   legacyBackup?: Tile[];        // copy of v1 rootTiles saved during migration
   attachmentFolder?: string;    // where pasted/dropped images are saved; default 'attachments/icon-board'
   bookmarkCacheDays?: number;   // days before re-fetching bookmark OG metadata; default 30
+  defaultStickyColor?: string;  // hex color used when creating new sticky notes
+  toolbarPosition?: 'left' | 'right' | 'top' | 'bottom';
 }
 
 export const DEFAULT_SETTINGS: IconBoardSettings = {
