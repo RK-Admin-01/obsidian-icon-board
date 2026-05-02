@@ -1172,17 +1172,18 @@ export class FreeformRenderer extends Component {
     el.addClass('icon-board-freeform-kanban-card');
 
     const header = el.createDiv('icon-board-kanban-header');
-    header.style.borderTopColor = card.color;
-    header.style.backgroundColor = `${card.color}26`;
 
     const titleEl = header.createDiv('icon-board-kanban-title');
     if (card.title) {
       titleEl.setText(card.title);
+      titleEl.style.color = card.color;
     } else {
       titleEl.addClass('icon-board-kanban-title-empty');
       titleEl.setText('Untitled');
     }
-    header.createSpan({ cls: 'icon-board-kanban-col-count' });
+
+    const countRow = header.createDiv('icon-board-kanban-count-row');
+    countRow.createSpan({ cls: 'icon-board-kanban-col-count' });
     this.updateKanbanCount(card, el);
 
     titleEl.addEventListener('dblclick', (e) => {
@@ -1270,12 +1271,13 @@ export class FreeformRenderer extends Component {
     const wipDot = cardEl.querySelector<HTMLElement>('.icon-board-kanban-wip-dot');
     const overWip = card.wipLimit !== undefined && card.items.length > card.wipLimit;
     if (countSpan) {
-      countSpan.setText(
-        card.wipLimit !== undefined ? `${card.items.length}/${card.wipLimit}` : String(card.items.length)
-      );
+      const n = card.items.length;
+      const label = card.wipLimit !== undefined ? `${n}/${card.wipLimit} cards` : `${n} ${n === 1 ? 'card' : 'cards'}`;
+      countSpan.setText(label);
     }
+    const countRow = cardEl.querySelector<HTMLElement>('.icon-board-kanban-count-row');
     if (overWip && !wipDot) {
-      cardEl.querySelector('.icon-board-kanban-header')?.createSpan({ cls: 'icon-board-kanban-wip-dot' });
+      (countRow ?? cardEl.querySelector('.icon-board-kanban-header'))?.createSpan({ cls: 'icon-board-kanban-wip-dot' });
     } else if (!overWip && wipDot) {
       wipDot.remove();
     }
@@ -1291,28 +1293,24 @@ export class FreeformRenderer extends Component {
     input.addClass('icon-board-kanban-title-input');
 
     let cancelled = false;
-    const commit = () => {
-      if (cancelled) {
-        titleEl.empty();
-        if (original) {
-          titleEl.setText(original);
-        } else {
-          titleEl.addClass('icon-board-kanban-title-empty');
-          titleEl.setText('Untitled');
-        }
-        return;
-      }
-      const val = input.value.trim();
-      this.pushUndo();
-      card.title = val || undefined;
+    const restoreTitle = (text: string | undefined) => {
       titleEl.empty();
-      if (card.title) {
+      if (text) {
         titleEl.removeClass('icon-board-kanban-title-empty');
-        titleEl.setText(card.title);
+        titleEl.setText(text);
+        titleEl.style.color = card.color;
       } else {
         titleEl.addClass('icon-board-kanban-title-empty');
         titleEl.setText('Untitled');
+        titleEl.style.color = '';
       }
+    };
+    const commit = () => {
+      if (cancelled) { restoreTitle(original || undefined); return; }
+      const val = input.value.trim();
+      this.pushUndo();
+      card.title = val || undefined;
+      restoreTitle(card.title);
       this.scheduleSave();
     };
 
@@ -1350,6 +1348,7 @@ export class FreeformRenderer extends Component {
       MarkdownRenderer.render(this.app, item.text, textEl, '', this).catch(() => textEl.setText(item.text));
     }
     if (item.imagePath) {
+      itemEl.addClass('has-image');
       const imgWrap = bodyEl.createDiv('icon-board-kanban-item-image');
       const vf = this.app.vault.getAbstractFileByPath(item.imagePath);
       if (vf instanceof TFile) {
