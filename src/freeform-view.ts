@@ -1,6 +1,6 @@
 import {
   App, TFile, TFolder, Menu, Notice, Modal, setIcon,
-  MarkdownRenderer, Component, FuzzySuggestModal, requestUrl,
+  MarkdownRenderer, Component, FuzzySuggestModal, requestUrl, sanitizeHTMLToDom,
 } from 'obsidian';
 import {
   IconBoardFile, TileCard, StickyCard, ChecklistCard, ChecklistItem, NoteLinkCard,
@@ -176,6 +176,31 @@ class WipLimitModal extends Modal {
   }
 
   onClose(): void { this.contentEl.empty(); }
+}
+
+class MediaSourceModal extends Modal {
+  constructor(
+    app: App,
+    private label: string,
+    private onVault: () => void,
+    private onUpload: () => void
+  ) { super(app); }
+
+  onOpen(): void {
+    const { contentEl } = this;
+    contentEl.createEl('h3', { text: this.label, cls: 'icon-board-media-source-title' });
+    const vaultBtn = contentEl.createEl('button', {
+      text: 'Choose from vault…',
+      cls: 'mod-cta icon-board-media-source-btn',
+    });
+    vaultBtn.addEventListener('click', () => { this.close(); this.onVault(); });
+    contentEl.createEl('div', { cls: 'icon-board-media-source-sep' });
+    const uploadBtn = contentEl.createEl('button', {
+      text: 'Upload from disk…',
+      cls: 'icon-board-media-source-btn',
+    });
+    uploadBtn.addEventListener('click', () => { this.close(); this.onUpload(); });
+  }
 }
 
 class TagInputModal extends Modal {
@@ -523,10 +548,11 @@ export class FreeformRenderer extends Component {
         const rect = this.outer.getBoundingClientRect();
         const cp = screenToCanvas(e.clientX - rect.left, e.clientY - rect.top, this.vp);
         if (IMAGE_EXTS.includes(ext)) {
+          const h = await this.measureImageH(this.app.vault.getResourcePath(vf));
           const card: ImageCard = {
             id: crypto.randomUUID(), kind: 'image',
-            x: snap(cp.x - IMAGE_DEFAULT_W / 2), y: snap(cp.y - IMAGE_DEFAULT_H / 2),
-            w: IMAGE_DEFAULT_W, h: IMAGE_DEFAULT_H, z: this.nextZ(),
+            x: snap(cp.x - IMAGE_DEFAULT_W / 2), y: snap(cp.y - h / 2),
+            w: IMAGE_DEFAULT_W, h, z: this.nextZ(),
             source: { type: 'vault', path: vf.path },
           };
           this.pushUndo(); this.board.cards.push(card); await this.saveNow();
@@ -774,17 +800,15 @@ export class FreeformRenderer extends Component {
 
     cb.addEventListener('pointerdown', e => e.stopPropagation());
     cb.addEventListener('change', () => {
-      if (item.isHeader) {
-        // Cascade to all children
-        const children = card.items.filter(i => i.parentId === item.id);
-        for (const child of children) {
-          child.done = cb.checked;
-          const childRow = listEl.querySelector<HTMLElement>(`[data-id="${child.id}"]`);
-          if (childRow) {
-            childRow.toggleClass('is-done', child.done);
-            const childCb = childRow.querySelector<HTMLInputElement>('.icon-board-checklist-cb');
-            if (childCb) { childCb.checked = child.done; childCb.indeterminate = false; }
-          }
+      // Cascade to any children of this item
+      const children = card.items.filter(i => i.parentId === item.id);
+      for (const child of children) {
+        child.done = cb.checked;
+        const childRow = listEl.querySelector<HTMLElement>(`[data-id="${child.id}"]`);
+        if (childRow) {
+          childRow.toggleClass('is-done', child.done);
+          const childCb = childRow.querySelector<HTMLInputElement>('.icon-board-checklist-cb');
+          if (childCb) { childCb.checked = cb.checked; childCb.indeterminate = false; }
         }
       }
       item.done = cb.checked;
@@ -793,16 +817,25 @@ export class FreeformRenderer extends Component {
       this.scheduleSave();
     });
 
-    const input = row.createEl('input') as HTMLInputElement;
-    input.type = 'text'; input.value = item.text;
-    input.placeholder = item.isHeader ? 'Section…' : 'Add a task…';
-    input.className = 'icon-board-checklist-item-input';
-    input.addEventListener('pointerdown', e => e.stopPropagation());
-    input.addEventListener('input', () => { item.text = input.value; });
-    input.addEventListener('blur', () => this.scheduleSave());
-    input.addEventListener('keydown', e => {
+    const textDiv = row.createDiv('icon-board-checklist-item-input') as HTMLElement;
+    textDiv.contentEditable = 'true';
+    textDiv.dataset.placeholder = item.isHeader ? 'Section…' : 'Add a task…';
+    if (item.text) textDiv.appendChild(sanitizeHTMLToDom(item.text));
+    textDiv.addEventListener('pointerdown', e => e.stopPropagation());
+
+    let fmtToolbar: TextFormatToolbar | null = null;
+    textDiv.addEventListener('focus', () => {
+      if (!fmtToolbar) fmtToolbar = new TextFormatToolbar(textDiv, row, this.container);
+    });
+    textDiv.addEventListener('blur', () => {
+      fmtToolbar?.destroy(); fmtToolbar = null;
+      item.text = textDiv.innerHTML;
+      this.scheduleSave();
+    });
+    textDiv.addEventListener('input', () => { item.text = textDiv.innerHTML; });
+    textDiv.addEventListener('keydown', e => {
       if (e.key === 'Enter') {
-        e.preventDefault();
+        e.preventDefault(); e.stopPropagation();
         const idx = card.items.indexOf(item);
         const ni: ChecklistItem = { id: crypto.randomUUID(), text: '', done: false, parentId: item.parentId };
         card.items.splice(idx + 1, 0, ni);
@@ -811,7 +844,7 @@ export class FreeformRenderer extends Component {
         setTimeout(() => nr.querySelector<HTMLElement>('.icon-board-checklist-item-input')?.focus(), 0);
       }
       if (e.key === 'Tab') {
-        e.preventDefault();
+        e.preventDefault(); e.stopPropagation();
         if (e.shiftKey) {
           if (item.parentId) {
             item.parentId = undefined;
@@ -831,10 +864,11 @@ export class FreeformRenderer extends Component {
           }
         }
       }
-      if (e.key === 'Backspace' && input.value === '') {
+      if (e.key === 'Backspace' && (textDiv.innerHTML === '' || textDiv.innerHTML === '<br>')) {
         const idx = card.items.indexOf(item);
         if (idx > 0) {
-          e.preventDefault(); card.items.splice(idx, 1);
+          e.preventDefault(); e.stopPropagation();
+          card.items.splice(idx, 1);
           const prev = row.previousElementSibling as HTMLElement | null;
           row.remove();
           prev?.querySelector<HTMLElement>('.icon-board-checklist-item-input')?.focus();
@@ -907,13 +941,10 @@ export class FreeformRenderer extends Component {
     if (children.length === 0) return;
     if (doneCount === children.length) {
       headerCb.checked = true; headerCb.indeterminate = false;
-      headerItem.done = true; headerRow?.addClass('is-done');
     } else if (doneCount > 0) {
       headerCb.indeterminate = true;
-      headerItem.done = false; headerRow?.removeClass('is-done');
     } else {
       headerCb.checked = false; headerCb.indeterminate = false;
-      headerItem.done = false; headerRow?.removeClass('is-done');
     }
   }
 
@@ -993,13 +1024,22 @@ export class FreeformRenderer extends Component {
       wrap.createDiv({ cls: 'icon-board-image-missing-label', text: 'Failed to load' });
     });
 
-    // Caption — render/edit two-state with format bar
+    const fixAspect = () => {
+      if (img.naturalWidth > 0 && img.naturalHeight > 0) {
+        const correctH = Math.max(IMAGE_MIN_H, snap(card.w * img.naturalHeight / img.naturalWidth));
+        if (correctH !== card.h) {
+          card.h = correctH;
+          el.style.height = `${correctH}px`;
+          this.scheduleSave();
+        }
+      }
+    };
+    img.addEventListener('load', fixAspect);
+    if (img.complete) fixAspect();
+
+    // Caption — render/edit two-state with TextFormatToolbar
     const captionWrap = el.createDiv('icon-board-image-caption-wrap');
     if (card.captionHidden) captionWrap.addClass('is-hidden');
-
-    const captionFmtBar = captionWrap.createDiv('icon-board-caption-format-bar');
-    captionFmtBar.style.display = 'none';
-    captionFmtBar.addEventListener('pointerdown', (e) => e.preventDefault());
 
     const captionViewEl = captionWrap.createDiv('icon-board-image-caption-view');
     if (card.captionScale) captionViewEl.addClass(`text-scale-${card.captionScale}`);
@@ -1014,62 +1054,47 @@ export class FreeformRenderer extends Component {
     };
     renderCaptionView();
 
-    const captionEl = captionWrap.createEl('textarea', { cls: 'icon-board-image-caption' }) as HTMLTextAreaElement;
-    captionEl.value = card.caption || '';
-    captionEl.placeholder = 'Add caption…';
-    captionEl.style.display = 'none';
-    if (card.captionScale) captionEl.addClass(`text-scale-${card.captionScale}`);
-    if (card.captionColor) captionEl.style.color = card.captionColor;
+    const captionEditor = captionWrap.createDiv('icon-board-image-caption-editor') as HTMLElement;
+    captionEditor.contentEditable = 'true';
+    captionEditor.style.display = 'none';
+    captionEditor.addEventListener('pointerdown', e => e.stopPropagation());
+
+    let captionFmtToolbar: TextFormatToolbar | null = null;
 
     const enterCaptionEdit = () => {
       captionViewEl.style.display = 'none';
-      captionEl.style.display = '';
-      captionFmtBar.style.display = 'flex';
-      captionEl.focus();
-      captionEl.setSelectionRange(captionEl.value.length, captionEl.value.length);
+      captionEditor.style.display = '';
+      captionEditor.innerHTML = card.caption ? captionViewEl.innerHTML : '';
+      captionEditor.focus();
+      const r = document.createRange();
+      r.selectNodeContents(captionEditor); r.collapse(false);
+      const s = window.getSelection();
+      s?.removeAllRanges(); s?.addRange(r);
+      captionFmtToolbar = new TextFormatToolbar(captionEditor, captionWrap, this.container);
     };
 
     const exitCaptionEdit = () => {
-      card.caption = captionEl.value;
+      captionFmtToolbar?.destroy(); captionFmtToolbar = null;
+      card.caption = captionEditor.innerHTML;
+      captionEditor.style.display = 'none';
       captionViewEl.style.display = '';
-      captionEl.style.display = 'none';
-      captionFmtBar.style.display = 'none';
       renderCaptionView();
       this.scheduleSave();
     };
 
     captionViewEl.addEventListener('click', (e) => { e.stopPropagation(); enterCaptionEdit(); });
     captionViewEl.addEventListener('pointerdown', (e) => e.stopPropagation());
-    captionEl.addEventListener('pointerdown', (e) => e.stopPropagation());
-    captionEl.addEventListener('input', () => { card.caption = captionEl.value; });
-    captionEl.addEventListener('blur', exitCaptionEdit);
-    captionEl.addEventListener('keydown', (e) => {
-      if (e.key === 'Escape') { captionEl.removeEventListener('blur', exitCaptionEdit); captionEl.value = card.caption || ''; exitCaptionEdit(); }
-    });
-
-    // Caption format bar helpers
-    const wrapCaption = (open: string, close: string) => {
-      const start = captionEl.selectionStart, end = captionEl.selectionEnd;
-      const sel = captionEl.value.slice(start, end);
-      captionEl.setRangeText(open + (sel || 'text') + close, start, end, 'select');
-      captionEl.focus();
-    };
-    const capFmtBtn = (label: string, title: string, fn: () => void) => {
-      const b = captionFmtBar.createEl('button', { cls: 'icon-board-format-btn', text: label });
-      b.setAttribute('title', title);
-      b.addEventListener('click', fn);
-    };
-    capFmtBtn('B', 'Bold', () => wrapCaption('**', '**'));
-    capFmtBtn('I', 'Italic', () => wrapCaption('*', '*'));
-    capFmtBtn('S', 'Strikethrough', () => wrapCaption('~~', '~~'));
-    captionFmtBar.createDiv('icon-board-format-sep');
-    const capColorBtn = captionFmtBar.createEl('input', { cls: 'icon-board-format-color' }) as HTMLInputElement;
-    capColorBtn.type = 'color'; capColorBtn.value = '#e11d48'; capColorBtn.title = 'Text colour';
-    capColorBtn.addEventListener('change', () => {
-      const start = captionEl.selectionStart, end = captionEl.selectionEnd;
-      const sel = captionEl.value.slice(start, end);
-      captionEl.setRangeText(`<span style="color:${capColorBtn.value}">${sel || 'text'}</span>`, start, end, 'select');
-      captionEl.focus();
+    captionEditor.addEventListener('blur', exitCaptionEdit);
+    captionEditor.addEventListener('keydown', (e) => {
+      e.stopPropagation();
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        captionFmtToolbar?.destroy(); captionFmtToolbar = null;
+        captionEditor.removeEventListener('blur', exitCaptionEdit);
+        captionEditor.style.display = 'none';
+        captionViewEl.style.display = '';
+        renderCaptionView();
+      }
     });
 
     el.createDiv('icon-board-card-resize-handle');
@@ -1338,6 +1363,7 @@ export class FreeformRenderer extends Component {
       const audioWrap = bodyEl.createDiv('icon-board-kanban-item-audio');
       const vf = this.app.vault.getAbstractFileByPath(item.audioPath);
       if (vf instanceof TFile) {
+        audioWrap.createDiv({ cls: 'icon-board-kanban-audio-title', text: vf.basename });
         const audio = audioWrap.createEl('audio');
         audio.src = this.app.vault.getResourcePath(vf);
         audio.controls = true;
@@ -1468,37 +1494,33 @@ export class FreeformRenderer extends Component {
   }
 
   private editKanbanItemInline(card: KanbanColumnCard, item: KanbanItem, itemEl: HTMLElement): void {
-    if (itemEl.querySelector('.icon-board-kanban-item-editor')) return;
     const textEl = itemEl.querySelector<HTMLElement>('.icon-board-kanban-item-text');
-    if (!textEl) return;
+    const bodyEl = itemEl.querySelector<HTMLElement>('.icon-board-kanban-item-body');
+    if (!textEl || !bodyEl || bodyEl.querySelector('.icon-board-kanban-item-editor')) return;
 
     const original = item.text;
+    const seedHTML = textEl.innerHTML;
+    textEl.style.display = 'none';
     itemEl.addClass('is-editing');
-    textEl.empty();
 
-    const ta = textEl.createEl('textarea', { cls: 'icon-board-kanban-item-editor' });
-    ta.value = original;
+    const editor = bodyEl.createDiv('icon-board-kanban-item-editor') as HTMLElement;
+    editor.contentEditable = 'true';
+    editor.innerHTML = item.text ? seedHTML : '';
+    editor.addEventListener('pointerdown', e => e.stopPropagation());
 
-    const autosize = () => { ta.style.height = 'auto'; ta.style.height = ta.scrollHeight + 'px'; };
+    const fmtToolbar = new TextFormatToolbar(editor, itemEl, this.container);
 
-    let cancelled = false;
+    let committed = false;
     const commit = () => {
+      if (committed) return;
+      committed = true;
       itemEl.removeClass('is-editing');
-      if (cancelled) {
-        textEl.empty();
-        if (original) {
-          MarkdownRenderer.render(this.app, original, textEl, '', this).catch(() => textEl.setText(original));
-        } else {
-          card.items = card.items.filter(i => i.id !== item.id);
-          itemEl.remove();
-          const cardEl = this.cardEls.get(card.id);
-          if (cardEl) this.updateKanbanCount(card, cardEl);
-        }
-        return;
-      }
-      const val = ta.value.trim();
-      this.pushUndo();
-      if (!val) {
+      fmtToolbar.destroy();
+      const html = editor.innerHTML;
+      editor.remove(); textEl.style.display = '';
+      const isEmpty = !html || html === '<br>' || !html.trim();
+      if (isEmpty) {
+        this.pushUndo();
         card.items = card.items.filter(i => i.id !== item.id);
         itemEl.remove();
         const cardEl = this.cardEls.get(card.id);
@@ -1506,23 +1528,42 @@ export class FreeformRenderer extends Component {
         this.scheduleSave();
         return;
       }
-      item.text = val;
+      this.pushUndo();
+      item.text = html;
       textEl.empty();
-      MarkdownRenderer.render(this.app, val, textEl, '', this).catch(() => textEl.setText(val));
+      MarkdownRenderer.render(this.app, html, textEl, '', this).catch(() => textEl.setText(html));
       this.scheduleSave();
     };
 
-    ta.addEventListener('input', autosize);
-    ta.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); ta.blur(); }
-      else if (e.key === 'Escape') { e.preventDefault(); cancelled = true; ta.blur(); }
+    editor.addEventListener('blur', commit);
+    editor.addEventListener('keydown', (e) => {
       e.stopPropagation();
+      if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); editor.blur(); }
+      else if (e.key === 'Escape') {
+        e.preventDefault();
+        committed = true;
+        fmtToolbar.destroy();
+        editor.removeEventListener('blur', commit);
+        editor.remove(); textEl.style.display = '';
+        itemEl.removeClass('is-editing');
+        if (!original) {
+          card.items = card.items.filter(i => i.id !== item.id);
+          itemEl.remove();
+          const cardEl = this.cardEls.get(card.id);
+          if (cardEl) this.updateKanbanCount(card, cardEl);
+        } else {
+          textEl.empty();
+          MarkdownRenderer.render(this.app, original, textEl, '', this).catch(() => textEl.setText(original));
+        }
+      }
     });
-    ta.addEventListener('blur', commit);
+
     requestAnimationFrame(() => {
-      ta.focus();
-      autosize();
-      ta.setSelectionRange(ta.value.length, ta.value.length);
+      editor.focus();
+      const r = document.createRange();
+      r.selectNodeContents(editor); r.collapse(false);
+      const s = window.getSelection();
+      s?.removeAllRanges(); s?.addRange(r);
     });
   }
 
@@ -1573,10 +1614,12 @@ export class FreeformRenderer extends Component {
     let dropIndicator: HTMLElement | null = null;
     let targetCard: KanbanColumnCard | null = null;
     let insertBeforeItemId: string | null = null;
+    let lastPointer = { x: startEvent.clientX, y: startEvent.clientY };
 
     const removeIndicator = () => { dropIndicator?.remove(); dropIndicator = null; };
 
     const onMove = (e: PointerEvent) => {
+      lastPointer = { x: e.clientX, y: e.clientY };
       ghost.style.left = `${itemRect.left + (e.clientX - startEvent.clientX)}px`;
       ghost.style.top = `${itemRect.top + (e.clientY - startEvent.clientY)}px`;
       removeIndicator();
@@ -1626,7 +1669,37 @@ export class FreeformRenderer extends Component {
       removeIndicator();
       itemEl.removeClass('is-dragging');
 
-      if (!targetCard) return;
+      if (!targetCard) {
+        // Drop onto canvas: eject image or audio items back as canvas cards
+        if (item.imagePath || item.audioPath) {
+          const outerRect = this.outer.getBoundingClientRect();
+          const overCanvas = lastPointer.x >= outerRect.left && lastPointer.x <= outerRect.right &&
+                             lastPointer.y >= outerRect.top  && lastPointer.y <= outerRect.bottom;
+          if (overCanvas) {
+            const cp = screenToCanvas(lastPointer.x - outerRect.left, lastPointer.y - outerRect.top, this.vp);
+            this.pushUndo();
+            sourceCard.items = sourceCard.items.filter(i => i.id !== item.id);
+            this.rebuildKanbanCard(sourceCard);
+            if (item.imagePath) {
+              const c: ImageCard = { id: crypto.randomUUID(), kind: 'image',
+                x: snap(cp.x - IMAGE_DEFAULT_W / 2), y: snap(cp.y - IMAGE_DEFAULT_H / 2),
+                w: IMAGE_DEFAULT_W, h: IMAGE_DEFAULT_H, z: this.nextZ(),
+                source: { type: 'vault', path: item.imagePath } };
+              this.board.cards.push(c); this.createCardEl(c);
+              this.selection.select(c.id); this.refreshSelectionVisuals();
+            } else if (item.audioPath) {
+              const c: AudioCard = { id: crypto.randomUUID(), kind: 'audio',
+                x: snap(cp.x - AUDIO_DEFAULT_W / 2), y: snap(cp.y - AUDIO_DEFAULT_H / 2),
+                w: AUDIO_DEFAULT_W, h: AUDIO_DEFAULT_H, z: this.nextZ(),
+                source: { type: 'vault', path: item.audioPath } };
+              this.board.cards.push(c); this.createCardEl(c);
+              this.selection.select(c.id); this.refreshSelectionVisuals();
+            }
+            this.scheduleSave();
+          }
+        }
+        return;
+      }
       this.pushUndo();
 
       sourceCard.items = sourceCard.items.filter(i => i.id !== item.id);
@@ -1744,6 +1817,8 @@ export class FreeformRenderer extends Component {
         if (c) startPos.set(id, { x: c.x ?? 0, y: c.y ?? 0 });
       }
 
+      let hoveredKanban: KanbanColumnCard | null = null;
+
       const onMove = (e: PointerEvent) => {
         const dx = e.clientX - sc.x, dy = e.clientY - sc.y;
         if (!dragMoved) {
@@ -1758,9 +1833,47 @@ export class FreeformRenderer extends Component {
           cel.style.left = `${c.x}px`; cel.style.top = `${c.y}px`;
           this.updateConnectionsForCard(id);
         }
+        if ((card.kind === 'image' || card.kind === 'audio') && startPos.size === 1) {
+          const elRect = el.getBoundingClientRect();
+          let found: KanbanColumnCard | null = null;
+          for (const kc of this.board.cards) {
+            if (kc.kind !== 'kanban-column') continue;
+            const kEl = this.cardEls.get(kc.id);
+            if (!kEl) continue;
+            const kr = kEl.getBoundingClientRect();
+            if (elRect.left < kr.right && elRect.right > kr.left && elRect.top < kr.bottom && elRect.bottom > kr.top) {
+              found = kc as KanbanColumnCard; break;
+            }
+          }
+          if (found !== hoveredKanban) {
+            if (hoveredKanban) this.cardEls.get(hoveredKanban.id)?.removeClass('is-kanban-drop-target');
+            hoveredKanban = found;
+            if (found) this.cardEls.get(found.id)?.addClass('is-kanban-drop-target');
+          }
+        }
       };
       const onUp = () => {
         el.removeEventListener('pointermove', onMove); el.removeEventListener('pointerup', onUp);
+        if (hoveredKanban) this.cardEls.get(hoveredKanban.id)?.removeClass('is-kanban-drop-target');
+        if (dragMoved && hoveredKanban && (card.kind === 'image' || card.kind === 'audio')) {
+          const targetCard = hoveredKanban;
+          const kEl = this.cardEls.get(targetCard.id);
+          const itemsEl = kEl?.querySelector<HTMLElement>('.icon-board-kanban-items');
+          if (itemsEl) {
+            const path = (card as ImageCard | AudioCard).source.path;
+            const item: KanbanItem = card.kind === 'image'
+              ? { id: crypto.randomUUID(), text: '', imagePath: path }
+              : { id: crypto.randomUUID(), text: '', audioPath: path };
+            targetCard.items.push(item);
+            this.appendKanbanItem(itemsEl, targetCard, item);
+            if (kEl) this.updateKanbanCount(targetCard, kEl);
+            this.board.cards = this.board.cards.filter(c => c.id !== card.id);
+            el.remove(); this.cardEls.delete(card.id);
+            this.refreshSelectionVisuals();
+          }
+          this.scheduleSave();
+          return;
+        }
         if (dragMoved) this.scheduleSave();
       };
       el.addEventListener('pointermove', onMove); el.addEventListener('pointerup', onUp);
@@ -1768,11 +1881,14 @@ export class FreeformRenderer extends Component {
 
     el.addEventListener('dblclick', async (e) => {
       e.stopPropagation();
+      const target = e.target as HTMLElement;
       switch (card.kind) {
         case 'tile':      await this.activateTile(card); break;
         case 'sticky':    this.editStickyInline(el, card); break;
         case 'note-link': await this.activateNoteLink(card); break;
-        case 'image':     this.openImageSource(card); break;
+        case 'image':
+          if (target.closest('.icon-board-image-caption-wrap')) break;
+          this.openImageSource(card); break;
         case 'bookmark':  window.open(card.url, '_blank'); break;
       }
     });
@@ -2107,6 +2223,25 @@ export class FreeformRenderer extends Component {
     if (meta && e.key === 'd') { e.preventDefault(); this.duplicateSelected(); return; }
     if (meta && !e.shiftKey && e.key === 'z') { e.preventDefault(); this.undo(); return; }
     if ((meta && e.shiftKey && e.key === 'z') || (meta && e.key === 'y')) { e.preventDefault(); this.redo(); return; }
+    if (meta && e.shiftKey && e.key.toLowerCase() === 'c') {
+      const imageCards = this.selection.getIds()
+        .map(id => this.board.cards.find(c => c.id === id))
+        .filter((c): c is ImageCard => !!c && c.kind === 'image');
+      if (imageCards.length > 0) {
+        e.preventDefault();
+        this.pushUndo();
+        for (const card of imageCards) {
+          card.captionHidden = !card.captionHidden;
+          const cardEl = this.cardEls.get(card.id);
+          if (cardEl) {
+            const wrap = cardEl.querySelector<HTMLElement>('.icon-board-image-caption-wrap');
+            if (wrap) wrap.toggleClass('is-hidden', !!card.captionHidden);
+          }
+        }
+        this.scheduleSave();
+        return;
+      }
+    }
   }
 
   // ── Activation ─────────────────────────────────────────────────
@@ -2205,20 +2340,57 @@ export class FreeformRenderer extends Component {
 
   private addImage(): void { const p = this.centerPos(IMAGE_DEFAULT_W, IMAGE_DEFAULT_H); this.addImageAt(p.x, p.y); }
   private addImageAt(x: number, y: number): void {
-    new VaultImagePickerModal(this.app, (file) => {
-      const card: ImageCard = { id: crypto.randomUUID(), kind: 'image', x, y, w: IMAGE_DEFAULT_W, h: IMAGE_DEFAULT_H, z: this.nextZ(), source: { type: 'vault', path: file.path } };
+    const createCard = (path: string, h: number) => {
+      const card: ImageCard = { id: crypto.randomUUID(), kind: 'image', x, y, w: IMAGE_DEFAULT_W, h, z: this.nextZ(), source: { type: 'vault', path } };
       this.pushUndo(); this.board.cards.push(card); this.saveNow();
       this.createCardEl(card); this.selection.select(card.id); this.refreshSelectionVisuals();
+    };
+    const fromVault = () => new VaultImagePickerModal(this.app, async (f) => {
+      const h = await this.measureImageH(this.app.vault.getResourcePath(f));
+      createCard(f.path, h);
     }).open();
+    const fromUpload = () => {
+      const input = document.createElement('input');
+      input.type = 'file'; input.accept = IMAGE_EXTS.map(e => `.${e}`).join(',');
+      input.addEventListener('change', async () => {
+        const file = input.files?.[0]; if (!file) return;
+        const [h] = await Promise.all([this.measureImageH(file), this.ensureFolder(this.attachmentFolder)]);
+        const ext = file.type.includes('png') ? 'png' : file.type.includes('gif') ? 'gif' : file.type.includes('webp') ? 'webp' : 'jpg';
+        const base = file.name.replace(/\.[^.]+$/, '').replace(/\s+/g, '-');
+        const path = `${this.attachmentFolder}/${base}-${Date.now()}.${ext}`;
+        try { await this.app.vault.createBinary(path, await file.arrayBuffer()); }
+        catch { new Notice(`Failed to save ${file.name}.`); return; }
+        createCard(path, h);
+      });
+      input.click();
+    };
+    new MediaSourceModal(this.app, 'Add image', fromVault, fromUpload).open();
   }
 
   private addAudio(): void { const p = this.centerPos(AUDIO_DEFAULT_W, AUDIO_DEFAULT_H); this.addAudioAt(p.x, p.y); }
   private addAudioAt(x: number, y: number): void {
-    new VaultAudioPickerModal(this.app, (file) => {
-      const card: AudioCard = { id: crypto.randomUUID(), kind: 'audio', x, y, w: AUDIO_DEFAULT_W, h: AUDIO_DEFAULT_H, z: this.nextZ(), source: { type: 'vault', path: file.path } };
+    const createCard = (path: string) => {
+      const card: AudioCard = { id: crypto.randomUUID(), kind: 'audio', x, y, w: AUDIO_DEFAULT_W, h: AUDIO_DEFAULT_H, z: this.nextZ(), source: { type: 'vault', path } };
       this.pushUndo(); this.board.cards.push(card); this.saveNow();
       this.createCardEl(card); this.selection.select(card.id); this.refreshSelectionVisuals();
-    }).open();
+    };
+    const fromVault = () => new VaultAudioPickerModal(this.app, (f) => createCard(f.path)).open();
+    const fromUpload = () => {
+      const input = document.createElement('input');
+      input.type = 'file'; input.accept = AUDIO_EXTS.map(e => `.${e}`).join(',');
+      input.addEventListener('change', async () => {
+        const file = input.files?.[0]; if (!file) return;
+        await this.ensureFolder(this.attachmentFolder);
+        const ext = file.name.toLowerCase().endsWith('.mp3') ? 'mp3' : 'wav';
+        const base = file.name.replace(/\.[^.]+$/, '').replace(/\s+/g, '-');
+        const path = `${this.attachmentFolder}/${base}-${Date.now()}.${ext}`;
+        try { await this.app.vault.createBinary(path, await file.arrayBuffer()); }
+        catch { new Notice(`Failed to save ${file.name}.`); return; }
+        createCard(path);
+      });
+      input.click();
+    };
+    new MediaSourceModal(this.app, 'Add audio', fromVault, fromUpload).open();
   }
 
   private addBookmark(): void { const p = this.centerPos(BOOKMARK_DEFAULT_W, BOOKMARK_DEFAULT_H); this.addBookmarkAt(p.x, p.y); }
@@ -2235,7 +2407,27 @@ export class FreeformRenderer extends Component {
     this.fetchAndUpdateBookmark(card, el);
   }
 
-  // ── Image save helpers ─────────────────────────────────────────
+  // ── Image helpers ──────────────────────────────────────────────
+
+  private measureImageH(fileOrSrc: File | string): Promise<number> {
+    let src: string;
+    let revoke = false;
+    if (typeof fileOrSrc !== 'string') {
+      src = URL.createObjectURL(fileOrSrc); revoke = true;
+    } else { src = fileOrSrc; }
+    return new Promise<number>((resolve) => {
+      const img = new Image();
+      const done = (ok: boolean) => {
+        if (revoke) URL.revokeObjectURL(src);
+        resolve(ok && img.naturalWidth > 0
+          ? Math.max(IMAGE_MIN_H, snap(IMAGE_DEFAULT_W * img.naturalHeight / img.naturalWidth))
+          : IMAGE_DEFAULT_H);
+      };
+      img.onload  = () => done(true);
+      img.onerror = () => done(false);
+      img.src = src;
+    });
+  }
 
   private async ensureFolder(path: string): Promise<void> {
     if (!this.app.vault.getAbstractFileByPath(path)) {
@@ -2244,28 +2436,28 @@ export class FreeformRenderer extends Component {
   }
 
   private async handlePastedImage(file: File): Promise<void> {
-    await this.ensureFolder(this.attachmentFolder);
+    const [h] = await Promise.all([this.measureImageH(file), this.ensureFolder(this.attachmentFolder)]);
     const ext = file.type.includes('png') ? 'png' : file.type.includes('gif') ? 'gif' : 'jpg';
     const ts = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
     const path = `${this.attachmentFolder}/Pasted Image ${ts}.${ext}`;
     try {
-      await this.app.vault.adapter.writeBinary(path, await file.arrayBuffer());
+      await this.app.vault.createBinary(path, await file.arrayBuffer());
     } catch { new Notice('Failed to save pasted image.'); return; }
-    const { x, y } = this.centerPos(IMAGE_DEFAULT_W, IMAGE_DEFAULT_H);
-    const card: ImageCard = { id: crypto.randomUUID(), kind: 'image', x, y, w: IMAGE_DEFAULT_W, h: IMAGE_DEFAULT_H, z: this.nextZ(), source: { type: 'vault', path } };
+    const { x, y } = this.centerPos(IMAGE_DEFAULT_W, h);
+    const card: ImageCard = { id: crypto.randomUUID(), kind: 'image', x, y, w: IMAGE_DEFAULT_W, h, z: this.nextZ(), source: { type: 'vault', path } };
     this.pushUndo(); this.board.cards.push(card); await this.saveNow();
     this.createCardEl(card); this.selection.select(card.id); this.refreshSelectionVisuals();
   }
 
   private async handleDroppedImage(file: File, x: number, y: number): Promise<void> {
-    await this.ensureFolder(this.attachmentFolder);
+    const [h] = await Promise.all([this.measureImageH(file), this.ensureFolder(this.attachmentFolder)]);
     const ext = file.type.includes('png') ? 'png' : file.type.includes('gif') ? 'gif' : 'jpg';
     const base = file.name.replace(/\.[^.]+$/, '').replace(/\s+/g, '-');
     const path = `${this.attachmentFolder}/${base}-${Date.now()}.${ext}`;
     try {
-      await this.app.vault.adapter.writeBinary(path, await file.arrayBuffer());
+      await this.app.vault.createBinary(path, await file.arrayBuffer());
     } catch { new Notice(`Failed to save ${file.name}.`); return; }
-    const card: ImageCard = { id: crypto.randomUUID(), kind: 'image', x, y, w: IMAGE_DEFAULT_W, h: IMAGE_DEFAULT_H, z: this.nextZ(), source: { type: 'vault', path } };
+    const card: ImageCard = { id: crypto.randomUUID(), kind: 'image', x, y, w: IMAGE_DEFAULT_W, h, z: this.nextZ(), source: { type: 'vault', path } };
     this.pushUndo(); this.board.cards.push(card); await this.saveNow();
     this.createCardEl(card); this.selection.select(card.id); this.refreshSelectionVisuals();
   }
@@ -2276,7 +2468,7 @@ export class FreeformRenderer extends Component {
     const base = file.name.replace(/\.[^.]+$/, '').replace(/\s+/g, '-');
     const path = `${this.attachmentFolder}/${base}-${Date.now()}.${ext}`;
     try {
-      await this.app.vault.adapter.writeBinary(path, await file.arrayBuffer());
+      await this.app.vault.createBinary(path, await file.arrayBuffer());
     } catch { new Notice(`Failed to save ${file.name}.`); return; }
     this.addKanbanImageItem(path, card, itemsEl);
   }
@@ -2297,7 +2489,7 @@ export class FreeformRenderer extends Component {
     const base = file.name.replace(/\.[^.]+$/, '').replace(/\s+/g, '-');
     const path = `${this.attachmentFolder}/${base}-${Date.now()}.${ext}`;
     try {
-      await this.app.vault.adapter.writeBinary(path, await file.arrayBuffer());
+      await this.app.vault.createBinary(path, await file.arrayBuffer());
     } catch { new Notice(`Failed to save ${file.name}.`); return; }
     this.addKanbanAudioItem(path, card, itemsEl);
   }
@@ -2326,7 +2518,7 @@ export class FreeformRenderer extends Component {
     const base = file.name.replace(/\.[^.]+$/, '').replace(/\s+/g, '-');
     const path = `${this.attachmentFolder}/${base}-${Date.now()}.${ext}`;
     try {
-      await this.app.vault.adapter.writeBinary(path, await file.arrayBuffer());
+      await this.app.vault.createBinary(path, await file.arrayBuffer());
     } catch { new Notice(`Failed to save ${file.name}.`); return; }
     const card: AudioCard = { id: crypto.randomUUID(), kind: 'audio', x, y, w: AUDIO_DEFAULT_W, h: AUDIO_DEFAULT_H, z: this.nextZ(), source: { type: 'vault', path } };
     this.pushUndo(); this.board.cards.push(card); await this.saveNow();
@@ -2720,19 +2912,19 @@ export class FreeformRenderer extends Component {
     this.alignBarEl = this.container.createDiv('icon-board-align-bar');
 
     type AlignMode = Parameters<FreeformRenderer['alignCards']>[0];
-    // H group: horizontal alignment — adjusts X positions
+    // H group: horizontal alignment — adjusts X positions (left/right edges)
     const ALIGN_BTNS: { icon: string; title: string; mode: AlignMode }[] = [
-      { icon: 'align-left',      title: 'Align left edges',        mode: 'left'        },
-      { icon: 'align-center',    title: 'Center horizontally',     mode: 'center-h'    },
-      { icon: 'align-right',     title: 'Align right edges',       mode: 'right'       },
-      { icon: 'move-horizontal', title: 'Distribute horizontally', mode: 'distribute-h'},
+      { icon: 'align-start-vertical',  title: 'Align left edges',        mode: 'left'        },
+      { icon: 'align-center-vertical', title: 'Center horizontally',     mode: 'center-h'    },
+      { icon: 'align-end-vertical',    title: 'Align right edges',       mode: 'right'       },
+      { icon: 'arrows-left-right',     title: 'Distribute horizontally', mode: 'distribute-h'},
     ];
-    // V group: vertical alignment — adjusts Y positions
+    // V group: vertical alignment — adjusts Y positions (top/bottom edges)
     const VALIGN_BTNS: { icon: string; title: string; mode: AlignMode }[] = [
-      { icon: 'align-start-vertical',  title: 'Align top edges',       mode: 'top'         },
-      { icon: 'align-center-vertical', title: 'Center vertically',     mode: 'middle-v'    },
-      { icon: 'align-end-vertical',    title: 'Align bottom edges',    mode: 'bottom'      },
-      { icon: 'move-vertical',         title: 'Distribute vertically', mode: 'distribute-v'},
+      { icon: 'align-start-horizontal',  title: 'Align top edges',       mode: 'top'         },
+      { icon: 'align-center-horizontal', title: 'Center vertically',     mode: 'middle-v'    },
+      { icon: 'align-end-horizontal',    title: 'Align bottom edges',    mode: 'bottom'      },
+      { icon: 'arrows-up-down',          title: 'Distribute vertically', mode: 'distribute-v'},
     ];
 
     const makeBtn = (parent: HTMLElement, icon: string, title: string, mode: AlignMode) => {
@@ -2745,14 +2937,14 @@ export class FreeformRenderer extends Component {
     const hGroup = this.alignBarEl.createDiv('icon-board-align-bar-group');
     const hLabel = hGroup.createSpan('icon-board-align-bar-label');
     hLabel.setText('H');
-    for (const { icon, title, mode } of VALIGN_BTNS) makeBtn(hGroup, icon, title, mode);
+    for (const { icon, title, mode } of ALIGN_BTNS) makeBtn(hGroup, icon, title, mode);
 
     this.alignBarEl.createDiv('icon-board-align-bar-sep');
 
     const vGroup = this.alignBarEl.createDiv('icon-board-align-bar-group');
     const vLabel = vGroup.createSpan('icon-board-align-bar-label');
     vLabel.setText('V');
-    for (const { icon, title, mode } of ALIGN_BTNS) makeBtn(vGroup, icon, title, mode);
+    for (const { icon, title, mode } of VALIGN_BTNS) makeBtn(vGroup, icon, title, mode);
   }
 
   // ── Connection layer ───────────────────────────────────────────

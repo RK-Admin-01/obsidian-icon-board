@@ -973,6 +973,16 @@ body.theme-dark {
   height: 32px;
 }
 
+.icon-board-kanban-audio-title {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text-muted);
+  margin-bottom: 3px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .icon-board-kanban-items.is-drag-over {
   outline: 2px dashed var(--interactive-accent);
   outline-offset: -2px;
@@ -1017,16 +1027,12 @@ body.theme-dark {
 
 .icon-board-kanban-item-editor {
   width: 100%;
-  resize: none;
-  overflow: hidden;
-  background: transparent;
-  border: none;
   outline: none;
   font: inherit;
   color: inherit;
-  padding: 0;
-  margin: 0;
   line-height: 1.4;
+  min-height: 1em;
+  word-break: break-word;
 }
 
 .icon-board-kanban-drag-ghost {
@@ -1050,6 +1056,26 @@ body.theme-dark {
   border-radius: 1px;
   margin: 1px 0;
   flex-shrink: 0;
+}
+
+.icon-board-freeform-kanban-card.is-kanban-drop-target {
+  outline: 2px solid var(--interactive-accent);
+  outline-offset: 2px;
+}
+
+/* Media source picker modal */
+.icon-board-media-source-title {
+  margin-bottom: 12px;
+}
+.icon-board-media-source-btn {
+  display: block;
+  width: 100%;
+  margin-bottom: 8px;
+}
+.icon-board-media-source-sep {
+  height: 1px;
+  background: var(--background-modifier-border);
+  margin: 8px 0;
 }
 
 .icon-board-kanban-add-btn {
@@ -1194,72 +1220,12 @@ body.theme-dark {
 
 /* ── Format bars (used by image caption editor) ─────────────── */
 
-.icon-board-caption-format-bar {
-  display: flex;
-  align-items: center;
-  gap: 2px;
-  padding: 3px 4px;
-  background: rgba(0,0,0,0.08);
-  border-radius: 3px;
-  margin-bottom: 4px;
-  flex-shrink: 0;
-}
-
-.icon-board-caption-format-bar {
-  margin-bottom: 0;
-  border-radius: 3px 3px 0 0;
-}
-
-.icon-board-format-btn {
-  width: 24px;
-  height: 24px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 12px;
-  font-weight: 700;
-  border-radius: 2px;
-  cursor: pointer;
-  background: transparent;
-  border: none;
-  color: rgba(0,0,0,0.6);
-  font-family: var(--font-text);
-  transition: background 80ms;
-  padding: 0;
-}
-
-/* B/I/S visual styles — applied by position within the bar */
-.icon-board-format-btn:nth-child(2) { font-style: italic; font-weight: 400; }
-.icon-board-format-btn:nth-child(3) { text-decoration: line-through; font-weight: 400; }
-
-.icon-board-format-btn:hover { background: rgba(0,0,0,0.12); color: rgba(0,0,0,0.85); }
-.icon-board-format-btn.is-active { background: rgba(0,0,0,0.15); color: rgba(0,0,0,0.9); }
-
-.icon-board-format-sep {
-  width: 1px;
-  height: 16px;
-  background: rgba(0,0,0,0.18);
-  margin: 0 3px;
-  flex-shrink: 0;
-}
-
 .icon-board-align-btn {
   font-family: var(--font-monospace);
   font-size: 10px;
   font-weight: 400;
   text-decoration: none !important;
   font-style: normal !important;
-}
-
-.icon-board-format-color {
-  width: 22px;
-  height: 22px;
-  border: none;
-  border-radius: 50%;
-  cursor: pointer;
-  background: none;
-  padding: 0;
-  flex-shrink: 0;
 }
 
 /* ── Text formatting toolbar (floating selection popover) ─────── */
@@ -1485,14 +1451,18 @@ body.theme-dark {
 
 .icon-board-checklist-item-input {
   flex: 1;
-  background: transparent !important;
-  border: none !important;
-  box-shadow: none !important;
   outline: none;
   font-size: 12px;
   color: var(--text-normal);
-  padding: 0;
   min-width: 0;
+  word-break: break-word;
+  line-height: 1.4;
+}
+
+.icon-board-checklist-item-input:empty::before {
+  content: attr(data-placeholder);
+  color: var(--text-faint);
+  pointer-events: none;
 }
 
 .icon-board-checklist-item.is-header .icon-board-checklist-item-input {
@@ -1661,7 +1631,7 @@ body.theme-dark {
   justify-content: flex-start;
   padding: 0;
   border-radius: 3px;
-  overflow: hidden;
+  overflow: visible;
   background: var(--background-secondary);
   border: 1px solid var(--background-modifier-border);
   gap: 0;
@@ -1675,6 +1645,7 @@ body.theme-dark {
   align-items: center;
   justify-content: center;
   background: var(--background-modifier-form-field);
+  border-radius: 3px;
 }
 
 .icon-board-image-img {
@@ -1703,11 +1674,16 @@ body.theme-dark {
 }
 
 .icon-board-image-caption-wrap {
-  flex-shrink: 0;
-  width: 100%;
-  border-top: 1px solid var(--background-modifier-border);
+  position: absolute;
+  top: calc(100% + 3px);
+  left: -1px;
+  right: -1px;
+  background: var(--background-secondary);
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 3px;
   display: flex;
   flex-direction: column;
+  z-index: 1;
 }
 
 .icon-board-image-caption-wrap.is-hidden { display: none; }
@@ -1732,24 +1708,18 @@ body.theme-dark {
   font-style: italic;
 }
 
-.icon-board-image-caption {
+.icon-board-image-caption-editor {
   width: 100%;
-  background: transparent !important;
-  border: none !important;
   outline: none;
   font-size: 12px;
   color: var(--text-muted);
   padding: 5px 8px;
   box-sizing: border-box;
   font-family: var(--font-text);
-  box-shadow: none !important;
-  resize: none;
-  overflow: hidden;
-  min-height: 0;
   line-height: 1.4;
+  min-height: 1.4em;
+  word-break: break-word;
 }
-
-.icon-board-image-caption::placeholder { color: var(--text-faint); }
 
 /* ── Audio card ─────────────────────────────────────────────── */
 
