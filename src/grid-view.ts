@@ -73,7 +73,7 @@ export class GridRenderer {
     wrapper.setAttribute('aria-label', tile.label + (tile.subtitle ? `, ${tile.subtitle}` : ''));
 
     const tileEl = wrapper.createDiv('icon-board-tile');
-    tileEl.style.backgroundColor = tile.color;
+    tileEl.setCssProps({ '--ib-tile-color': tile.color });
 
     const iconColor = contrastColor(tile.color);
     const iconEl = tileEl.createDiv('icon-board-tile-icon');

@@ -2,29 +2,21 @@
    Icon Board — styles
    ============================================================ */
 
-/* ── Typography system ───────────────────────────────────────── */
+/* ── Typography & elevation system ──────────────────────────── */
 
 body {
   --ib-font-display: 'New York', Georgia, 'Book Antiqua', 'Palatino Linotype', serif;
   --ib-font-body: var(--font-text);
   --ib-card-bg: #FFFFFF;
   --ib-card-text: #323B4A;
-}
-
-body.theme-dark {
-  --ib-card-bg: #333333;
-  --ib-card-text: #F2F2F2;
-}
-
-/* ── Elevation shadow system ─────────────────────────────────── */
-
-body {
   --ib-shadow-low:  0 1px 3px rgba(0,0,0,0.08), 0 1px 6px rgba(0,0,0,0.06);
   --ib-shadow-mid:  0 3px 10px rgba(0,0,0,0.10), 0 1px 4px rgba(0,0,0,0.08);
   --ib-shadow-high: 0 8px 28px rgba(0,0,0,0.14), 0 2px 8px rgba(0,0,0,0.10);
 }
 
 body.theme-dark {
+  --ib-card-bg: #333333;
+  --ib-card-text: #F2F2F2;
   --ib-shadow-low:  0 1px 3px rgba(0,0,0,0.28), 0 1px 6px rgba(0,0,0,0.18);
   --ib-shadow-mid:  0 3px 10px rgba(0,0,0,0.35), 0 1px 4px rgba(0,0,0,0.22);
   --ib-shadow-high: 0 8px 28px rgba(0,0,0,0.45), 0 2px 8px rgba(0,0,0,0.30);
@@ -153,6 +145,7 @@ body.theme-dark {
   transition: transform 150ms ease, box-shadow 150ms ease;
   position: relative;
   flex-shrink: 0;
+  background-color: var(--ib-tile-color, var(--interactive-accent));
 }
 
 .icon-board-tile-wrapper:hover .icon-board-tile {
@@ -544,16 +537,19 @@ body.theme-dark {
 .icon-board-freeform-toolbar-fab svg { width: 22px; height: 22px; }
 
 @media (max-width: 540px) {
-  .icon-board-freeform-toolbar {
-    left: 0 !important;
-    right: 0 !important;
-    bottom: 0 !important;
-    top: auto !important;
-    transform: none !important;
+  .icon-board-freeform-toolbar.tb-pos-left,
+  .icon-board-freeform-toolbar.tb-pos-right,
+  .icon-board-freeform-toolbar.tb-pos-top,
+  .icon-board-freeform-toolbar.tb-pos-bottom {
+    left: 0;
+    right: 0;
+    bottom: 0;
+    top: auto;
+    transform: none;
     flex-direction: row;
     justify-content: center;
-    width: auto !important;
-    height: 64px !important;
+    width: auto;
+    height: 64px;
     border-radius: 0;
     border-left: none;
     border-right: none;
@@ -563,16 +559,16 @@ body.theme-dark {
     overflow-x: auto;
   }
 
-  .ib-add-panel {
-    flex-direction: row !important;
-    width: auto !important;
+  .icon-board-freeform-toolbar .ib-add-panel {
+    flex-direction: row;
+    width: auto;
     height: 100%;
   }
 
-  .icon-board-tb-overflow-sep {
-    width: 1px !important;
-    height: 32px !important;
-    margin: 0 4px !important;
+  .icon-board-freeform-toolbar .icon-board-tb-overflow-sep {
+    width: 1px;
+    height: 32px;
+    margin: 0 4px;
   }
 
   .icon-board-tb-btn {
@@ -618,9 +614,11 @@ body.theme-dark {
   align-items: center;
   width: 100%;
   gap: 4px;
+  pointer-events: none;
 }
 .ib-ctx-active .ib-ctx-panel {
   display: flex;
+  pointer-events: auto;
 }
 
 /* Back button */
@@ -661,9 +659,9 @@ body.theme-dark {
 }
 
 /* Trash confirm state */
-.ib-ctx-trash--confirm {
-  background: rgba(239, 68, 68, 0.15) !important;
-  color: #ef4444 !important;
+.icon-board-tb-btn.ib-ctx-trash--confirm {
+  background: rgba(239, 68, 68, 0.15);
+  color: #ef4444;
 }
 
 /* Color swatch grid */
@@ -729,9 +727,10 @@ body.theme-dark {
   background: var(--background-modifier-hover);
   color: var(--text-normal);
 }
-.ib-ctx-tab--active {
+.ib-ctx-tab--active,
+.ib-ctx-tab.ib-ctx-tab--active:hover {
   background: var(--interactive-accent);
-  color: #ffffff !important;
+  color: #ffffff;
 }
 .ib-ctx-swatch-area {
   display: flex;
@@ -858,9 +857,9 @@ body.theme-dark {
   color: var(--text-error, #ef4444);
 }
 
-.icon-board-conn-props-delete:hover {
-  background: rgba(239,68,68,0.1) !important;
-  color: var(--text-error, #ef4444) !important;
+.icon-board-conn-props .icon-board-conn-props-delete:hover {
+  background: rgba(239,68,68,0.1);
+  color: var(--text-error, #ef4444);
 }
 
 .icon-board-conn-props-label-wrap {
@@ -1085,7 +1084,7 @@ body.theme-dark {
 
 /* Collapsed state: hide items/add-btn and shrink to header only */
 .icon-board-freeform-kanban-card.is-collapsed {
-  height: auto !important;
+  height: auto;
 }
 .icon-board-freeform-kanban-card.is-collapsed .icon-board-kanban-items,
 .icon-board-freeform-kanban-card.is-collapsed .icon-board-kanban-add-btn,
@@ -1531,12 +1530,12 @@ body.theme-dark {
 
 /* ── Format bars (used by image caption editor) ─────────────── */
 
-.icon-board-align-btn {
+.icon-board-align-bar .icon-board-align-btn {
   font-family: var(--font-monospace);
   font-size: 10px;
   font-weight: 400;
-  text-decoration: none !important;
-  font-style: normal !important;
+  text-decoration: none;
+  font-style: normal;
 }
 
 /* ── Text formatting toolbar (floating selection popover) ─────── */
@@ -1670,13 +1669,13 @@ body.theme-dark {
 
 /* ── Text scale utilities ────────────────────────────────────── */
 
-.text-scale-sm { font-size: 11px !important; }
-.text-scale-sm p, .text-scale-sm li { font-size: 11px; }
+.icon-board-container .text-scale-sm { font-size: 11px; }
+.icon-board-container .text-scale-sm p, .icon-board-container .text-scale-sm li { font-size: 11px; }
 
-.text-scale-md { font-size: 14px !important; }
+.icon-board-container .text-scale-md { font-size: 14px; }
 
-.text-scale-lg { font-size: 18px !important; }
-.text-scale-lg p, .text-scale-lg li { font-size: 18px; }
+.icon-board-container .text-scale-lg { font-size: 18px; }
+.icon-board-container .text-scale-lg p, .icon-board-container .text-scale-lg li { font-size: 18px; }
 
 /* ── Checklist card ─────────────────────────────────────────── */
 
@@ -1704,22 +1703,22 @@ body.theme-dark {
   flex-shrink: 0;
 }
 
-.icon-board-checklist-title {
+input.icon-board-checklist-title {
   width: 100%;
-  background: transparent !important;
-  border: none !important;
-  box-shadow: none !important;
+  background: transparent;
+  border: none;
+  box-shadow: none;
   outline: none;
   padding: 10px 12px 6px;
   box-sizing: border-box;
   /* Input elements ignore inherited font rules — force them explicitly */
-  font-family: var(--ib-font-display) !important;
-  font-size: 16px !important;
-  font-weight: 700 !important;
-  text-transform: uppercase !important;
-  letter-spacing: 0.06em !important;
-  color: var(--text-muted) !important;
-  text-align: left !important;
+  font-family: var(--ib-font-display);
+  font-size: 16px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+  text-align: left;
 }
 
 .icon-board-checklist-list {
@@ -1749,14 +1748,14 @@ body.theme-dark {
   padding-left: 20px;
 }
 
-.icon-board-checklist-cb {
-  appearance: checkbox !important;
-  -webkit-appearance: checkbox !important;
-  display: block !important;
-  opacity: 1 !important;
+input.icon-board-checklist-cb {
+  appearance: checkbox;
+  -webkit-appearance: checkbox;
+  display: block;
+  opacity: 1;
   flex-shrink: 0;
-  width: 14px !important;
-  height: 14px !important;
+  width: 14px;
+  height: 14px;
   min-width: 14px;
   margin: 0;
   padding: 0;
@@ -1846,11 +1845,11 @@ body.theme-dark {
 
 .icon-board-accent-pop-hex-row { display: flex; gap: 6px; }
 
-.icon-board-accent-pop-hex {
+input.icon-board-accent-pop-hex {
   width: 100%;
   font-size: 12px;
   background: var(--background-primary);
-  border: 1px solid var(--background-modifier-border) !important;
+  border: 1px solid var(--background-modifier-border);
   border-radius: 4px;
   padding: 4px 6px;
   outline: none;
@@ -2282,7 +2281,7 @@ body.theme-dark {
 .icon-board-tile-ghost .icon-board-tile {
   outline: 2px dashed var(--interactive-accent);
   outline-offset: 2px;
-  background: transparent !important;
+  --ib-tile-color: transparent;
 }
 
 .icon-board-tile-ghost .icon-board-tile-icon,
@@ -2653,10 +2652,6 @@ body.theme-dark {
 
 /* settings.ts: bookmark days input width */
 .ib-bookmark-days-input { width: 70px; }
-
-/* context-bar.ts: pointer-events via CSS instead of inline style */
-.ib-ctx-panel { pointer-events: none; }
-.ib-ctx-active .ib-ctx-panel { pointer-events: auto; }
 
 /* context-bar.ts: swatch border for light colours */
 .ib-swatch-border-light { box-shadow: inset 0 0 0 1px rgba(0,0,0,0.13); }

@@ -1331,11 +1331,19 @@ export class FreeformRenderer extends Component {
       this.pushUndo();
       card.collapsed = !card.collapsed;
       el.toggleClass('is-collapsed', !!card.collapsed);
+      if (card.collapsed) {
+        el.style.height = '';
+      } else {
+        el.style.height = `${card.h ?? 0}px`;
+      }
       this.scheduleSave();
     });
 
     // Apply collapsed state
-    if (card.collapsed) el.addClass('is-collapsed');
+    if (card.collapsed) {
+      el.addClass('is-collapsed');
+      el.style.height = '';
+    }
 
     const itemsEl = el.createDiv('icon-board-kanban-items');
     for (const item of card.items) {
