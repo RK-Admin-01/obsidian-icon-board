@@ -148,7 +148,7 @@ export class GridRenderer {
     });
 
     // Long-press for mobile
-    let longPressTimer: ReturnType<typeof setTimeout> | null = null;
+    let longPressTimer: number | null = null;
     wrapper.addEventListener('pointerdown', (e) => {
       longPressTimer = window.setTimeout(() => {
         longPressTimer = null;

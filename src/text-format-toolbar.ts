@@ -5,7 +5,7 @@
 // card's HTML field. Obsidian's MarkdownRenderer passes inline HTML through on render.
 // Same-type wrappers are always flattened before a new one is applied (no nesting).
 
-import { setIcon, activeDocument } from 'obsidian';
+import { setIcon } from 'obsidian';
 
 const TEXT_COLORS: (string | null)[] = [
   null,      // Default — removes colour

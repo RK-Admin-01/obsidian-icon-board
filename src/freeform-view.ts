@@ -1,7 +1,6 @@
 import {
   App, TFile, TFolder, Menu, Notice, Modal, setIcon,
   MarkdownRenderer, Component, FuzzySuggestModal, requestUrl, sanitizeHTMLToDom,
-  activeDocument,
 } from 'obsidian';
 import {
   IconBoardFile, TileCard, StickyCard, ChecklistCard, ChecklistItem, NoteLinkCard,
@@ -297,7 +296,7 @@ export class FreeformRenderer extends Component {
   private spaceDown = false;
   private isPanning = false;
 
-  private saveTimer: ReturnType<typeof setTimeout> | null = null;
+  private saveTimer: number | null = null;
   private alignBarEl: HTMLElement | null = null;
   private pendingTool: string | null = null;
   private pendingToolBtn: HTMLElement | null = null;
