@@ -2097,53 +2097,6 @@ export class FreeformRenderer extends Component {
 
     if (card.kind === 'sticky') {
       menu.addItem(i => i.setTitle('Edit text').setIcon('pencil').onClick(() => this.editStickyInline(el, card)));
-      menu.addSeparator();
-      for (const { color, name } of STICKY_COLORS) {
-        menu.addItem(i => i.setTitle(name).setChecked(card.color === color).onClick(() => {
-          this.pushUndo(); card.color = color; el.style.backgroundColor = color; this.scheduleSave();
-        }));
-      }
-      menu.addSeparator();
-      menu.addItem(i => i.setTitle('Align left').setChecked(!card.textAlign || card.textAlign === 'left').onClick(() => {
-        this.pushUndo(); card.textAlign = 'left'; this.renderCardContent(el, card); this.bindCardEvents(el, card); this.scheduleSave();
-      }));
-      menu.addItem(i => i.setTitle('Align center').setChecked(card.textAlign === 'center').onClick(() => {
-        this.pushUndo(); card.textAlign = 'center'; this.renderCardContent(el, card); this.bindCardEvents(el, card); this.scheduleSave();
-      }));
-      menu.addItem(i => i.setTitle('Align right').setChecked(card.textAlign === 'right').onClick(() => {
-        this.pushUndo(); card.textAlign = 'right'; this.renderCardContent(el, card); this.bindCardEvents(el, card); this.scheduleSave();
-      }));
-      menu.addItem(i => i.setTitle('Justify').setChecked(card.textAlign === 'justify').onClick(() => {
-        this.pushUndo(); card.textAlign = 'justify'; this.renderCardContent(el, card); this.bindCardEvents(el, card); this.scheduleSave();
-      }));
-      menu.addSeparator();
-      menu.addItem(i => i.setTitle('Text size: Small').setChecked(card.textScale === 'sm').onClick(() => {
-        this.pushUndo(); card.textScale = 'sm'; this.renderCardContent(el, card); this.bindCardEvents(el, card); this.scheduleSave();
-      }));
-      menu.addItem(i => i.setTitle('Text size: Medium').setChecked(!card.textScale || card.textScale === 'md').onClick(() => {
-        this.pushUndo(); card.textScale = 'md'; this.renderCardContent(el, card); this.bindCardEvents(el, card); this.scheduleSave();
-      }));
-      menu.addItem(i => i.setTitle('Text size: Large').setChecked(card.textScale === 'lg').onClick(() => {
-        this.pushUndo(); card.textScale = 'lg'; this.renderCardContent(el, card); this.bindCardEvents(el, card); this.scheduleSave();
-      }));
-      menu.addSeparator();
-      const TEXT_COLORS = [
-        { color: '#1f2937', name: 'Default' },
-        { color: '#dc2626', name: 'Red' },
-        { color: '#d97706', name: 'Amber' },
-        { color: '#16a34a', name: 'Green' },
-        { color: '#2563eb', name: 'Blue' },
-        { color: '#7c3aed', name: 'Purple' },
-        { color: '#db2777', name: 'Pink' },
-        { color: '#6b7280', name: 'Grey' },
-      ];
-      for (const { color, name } of TEXT_COLORS) {
-        menu.addItem(i => i.setTitle(`Text: ${name}`).setChecked(card.textColor === color || (!card.textColor && name === 'Default')).onClick(() => {
-          this.pushUndo();
-          card.textColor = name === 'Default' ? undefined : color;
-          this.renderCardContent(el, card); this.bindCardEvents(el, card); this.scheduleSave();
-        }));
-      }
     }
 
     if (card.kind === 'checklist') {
