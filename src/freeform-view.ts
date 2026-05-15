@@ -102,8 +102,6 @@ interface AppWithPrivateAPIs extends App {
   dragManager?: DragManager;
   plugins?: { enabledPlugins?: Set<string> };
 }
-/** @deprecated Use AppWithPrivateAPIs */
-type AppWithDragManager = AppWithPrivateAPIs;
 
 type SupportedCard = TileCard | StickyCard | ChecklistCard | NoteLinkCard | ImageCard | AudioCard | BookmarkCard | KanbanColumnCard;
 
@@ -571,7 +569,7 @@ export class FreeformRenderer extends Component {
         return;
       }
       // Vault sidebar file drag
-      const dragMgr = (this.app as AppWithDragManager).dragManager;
+      const dragMgr = (this.app as AppWithPrivateAPIs).dragManager;
       const draggable = dragMgr?.draggable;
       if (draggable?.type === 'file' && draggable.file instanceof TFile) {
         const vf = draggable.file;
@@ -1365,7 +1363,7 @@ export class FreeformRenderer extends Component {
         }
         return;
       }
-      const dragMgr = (this.app as AppWithDragManager).dragManager;
+      const dragMgr = (this.app as AppWithPrivateAPIs).dragManager;
       const draggable = dragMgr?.draggable;
       if (draggable?.type === 'file' && draggable.file instanceof TFile) {
         const vf = draggable.file;
@@ -2437,7 +2435,7 @@ export class FreeformRenderer extends Component {
     if (target.kind === 'folder') {
       if (!(file instanceof TFolder)) return;
       const ex = this.app.workspace.getLeavesOfType('file-explorer');
-      if (ex.length > 0) { const v = ex[0].view as any; if (typeof v.revealInFolder === 'function') v.revealInFolder(file); }
+      if (ex.length > 0) { const v = ex[0].view as { revealInFolder?: (f: TFolder) => void }; v.revealInFolder?.(file); }
       const firstNote = file.children?.find((f): f is TFile => f instanceof TFile && f.extension === 'md');
       if (firstNote) { const leaf = this.app.workspace.getLeaf('tab'); await leaf.openFile(firstNote); void this.app.workspace.revealLeaf(leaf); }
     }
@@ -2455,7 +2453,7 @@ export class FreeformRenderer extends Component {
       const file = this.app.vault.getAbstractFileByPath(card.source.path);
       if (file instanceof TFile) {
         const leaf = this.app.workspace.getLeaf('tab');
-        void leaf.openFile(file); this.app.workspace.revealLeaf(leaf);
+        void leaf.openFile(file); void this.app.workspace.revealLeaf(leaf);
       }
     } else {
       window.open(card.source.url, '_blank');
@@ -2678,7 +2676,7 @@ export class FreeformRenderer extends Component {
 
   private isDropAccepted(e: DragEvent): boolean {
     if (e.dataTransfer?.types.includes('Files')) return true;
-    const dragMgr = (this.app as AppWithDragManager).dragManager;
+    const dragMgr = (this.app as AppWithPrivateAPIs).dragManager;
     const draggable = dragMgr?.draggable;
     if (draggable?.type !== 'file' || !(draggable.file instanceof TFile)) return false;
     const ext = draggable.file.extension.toLowerCase();
@@ -2789,7 +2787,7 @@ export class FreeformRenderer extends Component {
   private undo(): void {
     if (!this.undoStack.length) return;
     this.redoStack.push(JSON.stringify({ cards: this.board.cards, connections: this.board.connections }));
-    const snap = JSON.parse(this.undoStack.pop()!);
+    const snap = JSON.parse(this.undoStack.pop()!) as { cards: IconBoardFile['cards']; connections: IconBoardFile['connections'] };
     this.board.cards = snap.cards; this.board.connections = snap.connections ?? [];
     this.scheduleSave(); this.rebuildCards();
   }
@@ -2797,7 +2795,7 @@ export class FreeformRenderer extends Component {
   private redo(): void {
     if (!this.redoStack.length) return;
     this.undoStack.push(JSON.stringify({ cards: this.board.cards, connections: this.board.connections }));
-    const snap = JSON.parse(this.redoStack.pop()!);
+    const snap = JSON.parse(this.redoStack.pop()!) as { cards: IconBoardFile['cards']; connections: IconBoardFile['connections'] };
     this.board.cards = snap.cards; this.board.connections = snap.connections ?? [];
     this.scheduleSave(); this.rebuildCards();
   }

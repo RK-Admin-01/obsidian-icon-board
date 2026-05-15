@@ -33,7 +33,6 @@ export class IconBoardSettingsTab extends PluginSettingTab {
   display(): void {
     const { containerEl } = this;
     containerEl.empty();
-    new Setting(containerEl).setName('General').setHeading();
 
     // ── Open on startup ──────────────────────────────────────
     new Setting(containerEl)

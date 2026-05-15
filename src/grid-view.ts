@@ -204,8 +204,8 @@ export class GridRenderer {
       if (!(abstract instanceof TFolder)) return;
       const explorerLeaves = this.app.workspace.getLeavesOfType('file-explorer');
       if (explorerLeaves.length > 0) {
-        const view = explorerLeaves[0].view as any;
-        if (typeof view.revealInFolder === 'function') view.revealInFolder(abstract);
+        const view = explorerLeaves[0].view as { revealInFolder?: (f: TFolder) => void };
+        view.revealInFolder?.(abstract);
       }
       const firstNote = abstract.children.find(
         (f): f is TFile => f instanceof TFile && f.extension === 'md'
