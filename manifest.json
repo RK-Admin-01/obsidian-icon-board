@@ -1,7 +1,7 @@
 {
   "id": "icon-board",
   "name": "Icon Board",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "minAppVersion": "1.7.2",
   "description": "A Milanote-style visual workspace: icon tiles, freeform canvas, sticky notes, checklists, kanban columns, images, audio, bookmarks, and note links.",
   "author": "RK-Media",
