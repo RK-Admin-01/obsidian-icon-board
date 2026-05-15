@@ -6,17 +6,18 @@ import { IconBoardFile } from './file-types';
 export async function readBoardFile(app: App, file: TFile): Promise<IconBoardFile> {
   const raw = await app.vault.read(file);
   try {
-    const parsed = JSON.parse(raw);
-    if (!parsed || typeof parsed !== 'object' || !Array.isArray(parsed.cards)) {
+    const parsed: unknown = JSON.parse(raw);
+    if (!parsed || typeof parsed !== 'object' || !Array.isArray((parsed as Record<string, unknown>).cards)) {
       throw new Error('Not a valid .iboard file');
     }
+    const board = parsed as IconBoardFile;
     // Migrate v2 → v3: add connections array and bump version
-    if (!Array.isArray(parsed.connections)) {
-      parsed.connections = [];
-      parsed.version = 3;
-      try { await writeBoardFile(app, file, parsed as IconBoardFile); } catch { /* silent */ }
+    if (!Array.isArray(board.connections)) {
+      board.connections = [];
+      board.version = 3;
+      try { await writeBoardFile(app, file, board); } catch { /* silent */ }
     }
-    return parsed as IconBoardFile;
+    return board;
   } catch {
     // Save a backup then return an empty board
     const backupPath = file.path + '.bak';

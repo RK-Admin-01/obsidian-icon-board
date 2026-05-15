@@ -281,7 +281,7 @@ export class ContextBar {
   }
 
   private mkCustomColor(p: HTMLElement, onSelect: (hex: string) => void, onBack: () => void): void {
-    const inp = p.createEl('input') as HTMLInputElement;
+    const inp = p.createEl('input');
     inp.type = 'color';
     inp.addClass('ib-ctx-color-wheel-input');
     inp.addEventListener('pointerdown', e => e.stopPropagation());

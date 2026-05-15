@@ -23,14 +23,14 @@ export default class IconBoardPlugin extends Plugin {
 
     // Ribbon — opens (or focuses) the default board
     this.addRibbonIcon('layout-grid', 'Icon Board', () => {
-      this.openDefaultBoard();
+      void this.openDefaultBoard();
     });
 
     // Command: open default board
     this.addCommand({
       id: 'open',
       name: 'Open',
-      callback: () => { this.openDefaultBoard(); },
+      callback: () => { void this.openDefaultBoard(); },
     });
 
     // Command: create a new board
@@ -38,8 +38,8 @@ export default class IconBoardPlugin extends Plugin {
       id: 'create-board',
       name: 'Create new board',
       callback: () => {
-        new CreateBoardModal(this.app, this, async (file) => {
-          await this.openBoardFile(file);
+        new CreateBoardModal(this.app, this, (file) => {
+          void this.openBoardFile(file);
         }).open();
       },
     });
@@ -85,7 +85,7 @@ export default class IconBoardPlugin extends Plugin {
     // If a board leaf is already visible, just focus it
     const existing = workspace.getLeavesOfType(ICON_BOARD_VIEW_TYPE);
     if (existing.length > 0) {
-      workspace.revealLeaf(existing[0]);
+      void workspace.revealLeaf(existing[0]);
       return;
     }
 
@@ -102,17 +102,16 @@ export default class IconBoardPlugin extends Plugin {
     }
 
     // No default board — prompt to create one
-    new CreateBoardModal(this.app, this, async (file) => {
+    new CreateBoardModal(this.app, this, (file) => {
       this.settings.defaultBoardPath = file.path;
-      await this.saveSettings();
-      await this.openBoardFile(file);
+      void this.saveSettings().then(() => this.openBoardFile(file));
     }).open();
   }
 
   async openBoardFile(file: TFile): Promise<void> {
     const leaf = this.app.workspace.getLeaf('tab');
     await leaf.openFile(file);
-    this.app.workspace.revealLeaf(leaf);
+    void this.app.workspace.revealLeaf(leaf);
   }
 
   // ── Migration ─────────────────────────────────────────────────

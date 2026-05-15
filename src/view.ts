@@ -138,7 +138,7 @@ export class IconBoardView extends FileView {
     const backBtn = header.createDiv('icon-board-back-btn' + (this.navigationHistory.length === 0 ? ' is-hidden' : ''));
     setIcon(backBtn, 'arrow-left');
     backBtn.setAttribute('aria-label', 'Go back');
-    backBtn.addEventListener('click', () => this.navigateBack());
+    backBtn.addEventListener('click', () => { void this.navigateBack(); });
 
     // Breadcrumb
     const breadcrumb = header.createDiv('icon-board-breadcrumb');
@@ -152,13 +152,13 @@ export class IconBoardView extends FileView {
           text: histFile.basename,
           cls: 'icon-board-breadcrumb-ancestor',
         });
-        span.addEventListener('click', async () => {
+        span.addEventListener('click', () => { void (async () => {
           // Navigate back to this point: slice history to index i
           const target = this.navigationHistory[i];
           this.navigationHistory = this.navigationHistory.slice(0, i);
           this.isInternalNavigation = true;
           await this.leaf.openFile(target);
-        });
+        })(); });
         breadcrumb.createSpan({ text: '›', cls: 'icon-board-breadcrumb-sep' });
       });
       breadcrumb.createSpan({ text: file.basename, cls: 'icon-board-breadcrumb-current' });

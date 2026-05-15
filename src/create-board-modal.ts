@@ -108,11 +108,11 @@ export class CreateBoardModal extends Modal {
       .addEventListener('click', () => this.close());
 
     const createBtn = btnRow.createEl('button', { text: 'Create board', cls: 'mod-cta' });
-    createBtn.addEventListener('click', async () => {
+    createBtn.addEventListener('click', () => { void (async () => {
       const name = this.boardName.trim() || 'New Icon Board';
       const file = await createBoardFile(this.app, name, this.targetFolder, this.layout);
       this.close();
       this.onCreated(file);
-    });
+    })(); });
   }
 }

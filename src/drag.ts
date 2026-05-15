@@ -21,7 +21,7 @@ export function initDrag<T>(
     delay: 150,
     delayOnTouchOnly: true,
     onMove: (evt) => !evt.related.classList.contains('icon-board-add-tile'),
-    onEnd: async (evt) => {
+    onEnd: (evt) => {
       const oldIdx = evt.oldDraggableIndex;
       const newIdx = evt.newDraggableIndex;
       if (oldIdx === undefined || newIdx === undefined || oldIdx === newIdx) return;
@@ -29,7 +29,7 @@ export function initDrag<T>(
       const reordered = [...items];
       const [moved] = reordered.splice(oldIdx, 1);
       reordered.splice(newIdx, 0, moved);
-      await onReorder(reordered);
+      void onReorder(reordered);
     },
   });
 }

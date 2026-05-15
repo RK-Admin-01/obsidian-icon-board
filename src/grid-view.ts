@@ -6,6 +6,11 @@ import { contrastColor } from './color-utils';
 import { TileModal, ConfirmModal } from './tile-modal';
 import { initDrag } from './drag';
 
+/** Typed wrapper for private Obsidian APIs used in grid-view. */
+interface AppWithPrivateAPIs extends App {
+  plugins?: { enabledPlugins?: Set<string> };
+}
+
 export class GridRenderer {
   private sortable: Sortable | null = null;
 
@@ -36,12 +41,12 @@ export class GridRenderer {
       if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); addBtn.click(); }
     });
     addBtn.addEventListener('click', () => {
-      new TileModal(this.app, null, async (newTile) => {
+      new TileModal(this.app, null, (newTile) => { void (async () => {
         newTile.order = this.board.cards.length;
         this.board.cards.push(newTile);
         await this.save();
         this.render();
-      }, this.file).open();
+      })(); }, this.file).open();
     });
 
     // Drag to rearrange
@@ -103,13 +108,13 @@ export class GridRenderer {
     // ── Interactions ─────────────────────────────────────────
     let suppressClick = false;
 
-    wrapper.addEventListener('click', async () => {
+    wrapper.addEventListener('click', () => {
       if (suppressClick) { suppressClick = false; return; }
-      await this.activateTile(tile);
+      void this.activateTile(tile);
     });
 
-    wrapper.addEventListener('keydown', async (e) => {
-      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); await this.activateTile(tile); }
+    wrapper.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); void this.activateTile(tile); }
       if (e.key === 'F10' && e.shiftKey) {
         e.preventDefault();
         const rect = wrapper.getBoundingClientRect();
@@ -125,23 +130,23 @@ export class GridRenderer {
       const menu = new Menu();
       menu.addItem(item =>
         item.setTitle('Edit').setIcon('pencil').onClick(() => {
-          new TileModal(this.app, tile, async (updated) => {
+          new TileModal(this.app, tile, (updated) => { void (async () => {
             const idx = this.board.cards.findIndex(c => c.id === updated.id);
             if (idx !== -1) this.board.cards[idx] = updated;
             await this.save();
             this.render();
-          }, this.file).open();
+          })(); }, this.file).open();
         })
       );
       menu.addSeparator();
       menu.addItem(item =>
         item.setTitle('Delete').setIcon('trash').onClick(() => {
           const msg = `Delete "${tile.label}"?`;
-          new ConfirmModal(this.app, msg, async () => {
+          new ConfirmModal(this.app, msg, () => { void (async () => {
             this.board.cards = this.board.cards.filter(c => c.id !== tile.id);
             await this.save();
             this.render();
-          }).open();
+          })(); }).open();
         })
       );
       menu.showAtMouseEvent(e);
@@ -181,7 +186,7 @@ export class GridRenderer {
       if (!(abstract instanceof TFile)) return;
       const leaf = this.app.workspace.getLeaf('tab');
       await leaf.openFile(abstract);
-      this.app.workspace.revealLeaf(leaf);
+      void this.app.workspace.revealLeaf(leaf);
       return;
     }
 
@@ -189,8 +194,8 @@ export class GridRenderer {
       if (!(abstract instanceof TFile)) return;
       const leaf = this.app.workspace.getLeaf('tab');
       await leaf.openFile(abstract);
-      this.app.workspace.revealLeaf(leaf);
-      const isInstalled = (this.app as any).plugins?.enabledPlugins?.has('obsidian-kanban') ?? false;
+      void this.app.workspace.revealLeaf(leaf);
+      const isInstalled = (this.app as AppWithPrivateAPIs).plugins?.enabledPlugins?.has('obsidian-kanban') ?? false;
       if (!isInstalled) new Notice('Install the community "Kanban" plugin to view this as a board.');
       return;
     }
@@ -208,7 +213,7 @@ export class GridRenderer {
       if (firstNote) {
         const leaf = this.app.workspace.getLeaf('tab');
         await leaf.openFile(firstNote);
-        this.app.workspace.revealLeaf(leaf);
+        void this.app.workspace.revealLeaf(leaf);
       }
     }
   }

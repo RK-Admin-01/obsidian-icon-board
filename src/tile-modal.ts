@@ -13,6 +13,11 @@ import { IconPickerModal } from './icon-picker';
 import { contrastColor } from './color-utils';
 import { createBoardFile } from './file-io';
 
+/** Typed wrapper for private Obsidian APIs used in tile-modal. */
+interface AppWithPrivateAPIs extends App {
+  plugins?: { enabledPlugins?: Set<string> };
+}
+
 const COLOR_PALETTE = [
   '#EF4444', '#F59E0B', '#EAB308', '#84CC16',
   '#10B981', '#06B6D4', '#3B82F6', '#8B5CF6',
@@ -234,7 +239,7 @@ export class TileModal extends Modal {
 
     // ── Target path ──
     if (this.targetKind === 'kanban') {
-      const isInstalled = (this.app as any).plugins?.enabledPlugins?.has('obsidian-kanban') ?? false;
+      const isInstalled = (this.app as AppWithPrivateAPIs).plugins?.enabledPlugins?.has('obsidian-kanban') ?? false;
       const kanbanPaths = this.getKanbanPaths();
 
       const pathSetting = new Setting(contentEl)
@@ -265,7 +270,8 @@ export class TileModal extends Modal {
         pathSetting.addButton(btn =>
           btn.setButtonText('Create new…').onClick(() => {
             this.close();
-            (this.app as any).commands.executeCommandById('obsidian-kanban:create-new-kanban-board');
+            // @ts-expect-error — accessing private Obsidian internal API to execute a community plugin command
+            (this.app as { commands: { executeCommandById(id: string): void } }).commands.executeCommandById('obsidian-kanban:create-new-kanban-board');
           })
         );
       }
@@ -301,7 +307,7 @@ export class TileModal extends Modal {
           const placeholder = this.targetKind === 'folder' ? 'Folder name'
             : this.targetKind === 'canvas' ? 'Canvas name'
             : 'Note name';
-          new NamePromptModal(this.app, heading, placeholder, async (name) => {
+          new NamePromptModal(this.app, heading, placeholder, (name) => { void (async () => {
             const basePath = this.currentFile?.parent?.path ?? '';
             const sep = basePath ? '/' : '';
             if (this.targetKind === 'folder') {
@@ -326,14 +332,14 @@ export class TileModal extends Modal {
                 this.render();
               } catch { new Notice('Failed to create note.'); }
             }
-          }).open();
+          })(); }).open();
         })
       );
     } else {
       // Board target: pick an existing .iboard file or create a new nested one
       const iboardPaths = this.app.vault
         .getAllLoadedFiles()
-        .filter(f => f instanceof TFile && (f as TFile).extension === 'iboard')
+        .filter((f): f is TFile => f instanceof TFile && f.extension === 'iboard')
         .map(f => f.path)
         .sort();
 
@@ -359,7 +365,7 @@ export class TileModal extends Modal {
 
       pathSetting.addButton(btn =>
         btn.setButtonText('Create new…').onClick(() => {
-          new NamePromptModal(this.app, 'New nested board', 'Board name', async (name) => {
+          new NamePromptModal(this.app, 'New nested board', 'Board name', (name) => { void (async () => {
             // Nested boards live in a folder named after the current board stem
             let folderPath = '';
             if (this.currentFile) {
@@ -368,15 +374,14 @@ export class TileModal extends Modal {
             if (folderPath && !this.app.vault.getAbstractFileByPath(folderPath)) {
               try { await this.app.vault.createFolder(folderPath); } catch { /* already exists */ }
             }
-            const folder = folderPath
-              ? (this.app.vault.getAbstractFileByPath(folderPath) as TFolder | null)
-              : null;
+            const folderAbstract = folderPath ? this.app.vault.getAbstractFileByPath(folderPath) : null;
+            const folder = folderAbstract instanceof TFolder ? folderAbstract : null;
             try {
               const newFile = await createBoardFile(this.app, name, folder, 'freeform');
               this.targetPath = newFile.path;
               this.render();
             } catch { new Notice('Failed to create board.'); }
-          }).open();
+          })(); }).open();
         })
       );
     }
@@ -403,15 +408,15 @@ export class TileModal extends Modal {
   private getPathsForKind(kind: 'folder' | 'canvas' | 'note'): string[] {
     const all = this.app.vault.getAllLoadedFiles();
     if (kind === 'folder') return all.filter(f => f instanceof TFolder).map(f => f.path).sort();
-    if (kind === 'canvas') return all.filter(f => f instanceof TFile && (f as TFile).extension === 'canvas').map(f => f.path).sort();
-    return all.filter(f => f instanceof TFile && (f as TFile).extension === 'md').map(f => f.path).sort();
+    if (kind === 'canvas') return all.filter((f): f is TFile => f instanceof TFile && f.extension === 'canvas').map(f => f.path).sort();
+    return all.filter((f): f is TFile => f instanceof TFile && f.extension === 'md').map(f => f.path).sort();
   }
 
   private getKanbanPaths(): string[] {
     return this.app.vault.getAllLoadedFiles()
-      .filter(f => {
-        if (!(f instanceof TFile) || (f as TFile).extension !== 'md') return false;
-        const cache = this.app.metadataCache.getFileCache(f as TFile);
+      .filter((f): f is TFile => {
+        if (!(f instanceof TFile) || f.extension !== 'md') return false;
+        const cache = this.app.metadataCache.getFileCache(f);
         return cache?.frontmatter != null && 'kanban-plugin' in cache.frontmatter;
       })
       .map(f => f.path)

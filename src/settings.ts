@@ -13,7 +13,7 @@ class BoardPickerModal extends FuzzySuggestModal<TFile> {
   }
   getItems(): TFile[] {
     return this.app.vault.getAllLoadedFiles()
-      .filter((f): f is TFile => f instanceof TFile && (f as TFile).extension === 'iboard');
+      .filter((f): f is TFile => f instanceof TFile && f.extension === 'iboard');
   }
   getItemText(f: TFile): string { return f.path; }
   onChooseItem(f: TFile): void { this.onChoose(f); }
@@ -33,7 +33,7 @@ export class IconBoardSettingsTab extends PluginSettingTab {
   display(): void {
     const { containerEl } = this;
     containerEl.empty();
-    new Setting(containerEl).setName('Icon Board').setHeading();
+    new Setting(containerEl).setName('General').setHeading();
 
     // ── Open on startup ──────────────────────────────────────
     new Setting(containerEl)
@@ -60,24 +60,24 @@ export class IconBoardSettingsTab extends PluginSettingTab {
 
     defaultSetting.addButton(btn =>
       btn.setButtonText('Browse…').onClick(() => {
-        new BoardPickerModal(this.app, async (file) => {
+        new BoardPickerModal(this.app, (file) => { void (async () => {
           this.plugin.settings.defaultBoardPath = file.path;
           await this.plugin.saveSettings();
           pathDisplay.textContent = file.path;
           pathDisplay.removeClass('is-empty');
           // Update "Clear" button visibility by re-rendering
           this.display();
-        }).open();
+        })(); }).open();
       })
     );
 
     if (this.plugin.settings.defaultBoardPath) {
       defaultSetting.addButton(btn =>
-        btn.setButtonText('Clear').onClick(async () => {
+        btn.setButtonText('Clear').onClick(() => { void (async () => {
           this.plugin.settings.defaultBoardPath = undefined;
           await this.plugin.saveSettings();
           this.display();
-        })
+        })(); })
       );
     }
 
@@ -152,12 +152,12 @@ export class IconBoardSettingsTab extends PluginSettingTab {
       const sw = stickyPalette.createDiv('icon-board-modal-swatch');
       sw.style.backgroundColor = color;
       if (color === currentColor) sw.addClass('is-selected');
-      sw.addEventListener('click', async () => {
+      sw.addEventListener('click', () => { void (async () => {
         stickyPalette.querySelectorAll<HTMLElement>('.icon-board-modal-swatch').forEach(s => s.removeClass('is-selected'));
         sw.addClass('is-selected');
         this.plugin.settings.defaultStickyColor = color;
         await this.plugin.saveSettings();
-      });
+      })(); });
     }
 
     // ── Assets ───────────────────────────────────────────────
@@ -184,7 +184,7 @@ export class IconBoardSettingsTab extends PluginSettingTab {
       .setName('Relink all boards now')
       .setDesc('Scan every .iboard file in the vault and fix broken links with a unique filename match. Useful after moving files.')
       .addButton(btn =>
-        btn.setButtonText('Relink now').onClick(async () => {
+        btn.setButtonText('Relink now').onClick(() => { void (async () => {
           btn.setButtonText('Scanning…');
           btn.buttonEl.disabled = true;
           const n = await relinkAllBoards(this.app);
@@ -193,7 +193,7 @@ export class IconBoardSettingsTab extends PluginSettingTab {
           new Notice(n > 0
             ? `Fixed ${n} broken link${n === 1 ? '' : 's'} across all boards.`
             : 'No broken links found.');
-        })
+        })(); })
       );
 
     // ── Export ───────────────────────────────────────────────
@@ -203,11 +203,11 @@ export class IconBoardSettingsTab extends PluginSettingTab {
       .setName('Export tiles as JSON')
       .setDesc('Copy all your tile data to the clipboard as JSON.')
       .addButton(btn =>
-        btn.setButtonText('Copy to clipboard').onClick(async () => {
+        btn.setButtonText('Copy to clipboard').onClick(() => { void (async () => {
           const json = JSON.stringify(this.plugin.settings.rootTiles, null, 2);
           await navigator.clipboard.writeText(json);
           new Notice('Tile data copied to clipboard.');
-        })
+        })(); })
       );
 
     // ── Import ───────────────────────────────────────────────
@@ -247,13 +247,13 @@ export class IconBoardSettingsTab extends PluginSettingTab {
             new ConfirmModal(
               this.app,
               `Replace all ${this.plugin.settings.rootTiles.length} existing tile(s) with the imported data?`,
-              async () => {
+              () => { void (async () => {
                 this.plugin.settings.rootTiles = parsed;
                 await this.plugin.saveSettings();
                 importArea.value = '';
                 this.importText = '';
                 new Notice(`Imported ${parsed.length} tile(s).`);
-              }
+              })(); }
             ).open();
           })
       );
@@ -272,11 +272,11 @@ export class IconBoardSettingsTab extends PluginSettingTab {
             new ConfirmModal(
               this.app,
               `Delete all ${this.plugin.settings.rootTiles.length} tile(s)? This cannot be undone.`,
-              async () => {
+              () => { void (async () => {
                 this.plugin.settings.rootTiles = [];
                 await this.plugin.saveSettings();
                 new Notice('All tiles deleted.');
-              }
+              })(); }
             ).open();
           })
       );

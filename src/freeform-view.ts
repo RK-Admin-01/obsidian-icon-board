@@ -93,6 +93,18 @@ const KANBAN_COLORS: { color: string; name: string }[] = [
 ];
 
 // ── Type helpers ───────────────────────────────────────────────
+
+/** Typed wrapper for the private Obsidian dragManager API. */
+interface DragManager {
+  draggable?: { type: string; file?: unknown };
+}
+interface AppWithPrivateAPIs extends App {
+  dragManager?: DragManager;
+  plugins?: { enabledPlugins?: Set<string> };
+}
+/** @deprecated Use AppWithPrivateAPIs */
+type AppWithDragManager = AppWithPrivateAPIs;
+
 type SupportedCard = TileCard | StickyCard | ChecklistCard | NoteLinkCard | ImageCard | AudioCard | BookmarkCard | KanbanColumnCard;
 
 function cardMinSize(kind: Card['kind']): { w: number; h: number } {
@@ -512,7 +524,7 @@ export class FreeformRenderer extends Component {
     });
 
     // Clipboard paste
-    this.outer.addEventListener('paste', async (e) => {
+    this.outer.addEventListener('paste', (e) => { void (async () => {
       const active = activeDocument.activeElement;
       if (active instanceof HTMLInputElement || active instanceof HTMLTextAreaElement
         || (active instanceof HTMLElement && active.getAttribute('contenteditable'))) return;
@@ -533,13 +545,13 @@ export class FreeformRenderer extends Component {
         const { x, y } = this.centerPos(STICKY_DEFAULT_W, STICKY_DEFAULT_H);
         this.addStickyAt(x, y, text);
       }
-    });
+    })(); });
 
     // Drag-and-drop from Finder or vault sidebar
     this.outer.addEventListener('dragover', (e) => {
       if (this.isDropAccepted(e)) { e.preventDefault(); e.dataTransfer!.dropEffect = 'copy'; }
     });
-    this.outer.addEventListener('drop', async (e) => {
+    this.outer.addEventListener('drop', (e) => { void (async () => {
       e.preventDefault();
       const files = e.dataTransfer?.files;
       if (files?.length) {
@@ -559,15 +571,17 @@ export class FreeformRenderer extends Component {
         return;
       }
       // Vault sidebar file drag
-      const draggable = (this.app as any).dragManager?.draggable;
-      if (draggable?.type === 'file' && draggable.file) {
-        const vf = draggable.file as TFile;
+      const dragMgr = (this.app as AppWithDragManager).dragManager;
+      const draggable = dragMgr?.draggable;
+      if (draggable?.type === 'file' && draggable.file instanceof TFile) {
+        const vf = draggable.file;
         const ext = vf.extension.toLowerCase();
         const rect = this.outer.getBoundingClientRect();
         const cp = screenToCanvas(e.clientX - rect.left, e.clientY - rect.top, this.vp);
         if (IMAGE_EXTS.includes(ext)) {
           const newPath = await sortAssetFile(this.app, vf);
-          const newFile = this.app.vault.getAbstractFileByPath(newPath) as TFile;
+          const newFile = this.app.vault.getAbstractFileByPath(newPath);
+          if (!(newFile instanceof TFile)) return;
           const h = await this.measureImageH(this.app.vault.getResourcePath(newFile));
           const card: ImageCard = {
             id: crypto.randomUUID(), kind: 'image',
@@ -589,7 +603,7 @@ export class FreeformRenderer extends Component {
           this.createCardEl(card); this.selection.select(card.id); this.refreshSelectionVisuals();
         }
       }
-    });
+    })(); });
   }
 
   // ── Pan ────────────────────────────────────────────────────────
@@ -622,16 +636,14 @@ export class FreeformRenderer extends Component {
     const sx = e.clientX - rect.left, sy = e.clientY - rect.top;
     this.marqueeEl.style.left = `${sx}px`;
     this.marqueeEl.style.top = `${sy}px`;
-    this.marqueeEl.style.width = '0';
-    this.marqueeEl.style.height = '0';
+    this.marqueeEl.setCssProps({ '--ib-marquee-w': '0px', '--ib-marquee-h': '0px' });
     this.marqueeEl.show();
     this.outer.setPointerCapture(e.pointerId);
     const onMove = (e: PointerEvent) => {
       const cx = e.clientX - rect.left, cy = e.clientY - rect.top;
-      this.marqueeEl.style.left   = `${Math.min(sx, cx)}px`;
-      this.marqueeEl.style.top    = `${Math.min(sy, cy)}px`;
-      this.marqueeEl.style.width  = `${Math.abs(cx - sx)}px`;
-      this.marqueeEl.style.height = `${Math.abs(cy - sy)}px`;
+      this.marqueeEl.style.left = `${Math.min(sx, cx)}px`;
+      this.marqueeEl.style.top  = `${Math.min(sy, cy)}px`;
+      this.marqueeEl.setCssProps({ '--ib-marquee-w': `${Math.abs(cx - sx)}px`, '--ib-marquee-h': `${Math.abs(cy - sy)}px` });
     };
     const onUp = (e: PointerEvent) => {
       this.outer.removeEventListener('pointermove', onMove); this.outer.removeEventListener('pointerup', onUp);
@@ -1341,7 +1353,7 @@ export class FreeformRenderer extends Component {
     itemsEl.addEventListener('dragover', (e) => {
       if (this.isDropAccepted(e)) { e.preventDefault(); e.stopPropagation(); e.dataTransfer!.dropEffect = 'copy'; }
     });
-    itemsEl.addEventListener('drop', async (e) => {
+    itemsEl.addEventListener('drop', (e) => { void (async () => {
       itemsEl.removeClass('is-drag-over');
       if (!this.isDropAccepted(e)) return;
       e.preventDefault(); e.stopPropagation();
@@ -1353,9 +1365,10 @@ export class FreeformRenderer extends Component {
         }
         return;
       }
-      const draggable = (this.app as any).dragManager?.draggable;
-      if (draggable?.type === 'file' && draggable.file) {
-        const vf = draggable.file as TFile;
+      const dragMgr = (this.app as AppWithDragManager).dragManager;
+      const draggable = dragMgr?.draggable;
+      if (draggable?.type === 'file' && draggable.file instanceof TFile) {
+        const vf = draggable.file;
         const ext = vf.extension.toLowerCase();
         if (IMAGE_EXTS.includes(ext)) {
           const newPath = await sortAssetFile(this.app, vf);
@@ -1365,7 +1378,7 @@ export class FreeformRenderer extends Component {
           this.addKanbanAudioItem(newPath, card, itemsEl);
         }
       }
-    });
+    })(); });
 
     const addBtn = el.createDiv('icon-board-kanban-add-btn');
     const addIcon = addBtn.createSpan();
@@ -1534,7 +1547,7 @@ export class FreeformRenderer extends Component {
         pill.createSpan({ text: noteName });
         pill.addEventListener('click', (e) => {
           e.stopPropagation();
-          this.app.workspace.openLinkText(item.linkedNotePath!, '', false);
+          void this.app.workspace.openLinkText(item.linkedNotePath!, '', false);
         });
       }
       if (item.tags) {
@@ -1609,7 +1622,7 @@ export class FreeformRenderer extends Component {
       const menu = new Menu();
       if (item.linkedNotePath) {
         menu.addItem(i => i.setTitle('Open linked note').setIcon('file-text').onClick(() => {
-          this.app.workspace.openLinkText(item.linkedNotePath!, '', false);
+          void this.app.workspace.openLinkText(item.linkedNotePath!, '', false);
         }));
         menu.addItem(i => i.setTitle('Remove link').setIcon('unlink').onClick(() => {
           this.pushUndo(); item.linkedNotePath = undefined;
@@ -2056,7 +2069,7 @@ export class FreeformRenderer extends Component {
       el.addEventListener('pointermove', onMove); el.addEventListener('pointerup', onUp);
     });
 
-    el.addEventListener('dblclick', async (e) => {
+    el.addEventListener('dblclick', (e) => { void (async () => {
       e.stopPropagation();
       const target = e.target as HTMLElement;
       switch (card.kind) {
@@ -2068,7 +2081,7 @@ export class FreeformRenderer extends Component {
           this.openImageSource(card); break;
         case 'bookmark':  window.open(card.url, '_blank'); break;
       }
-    });
+    })(); });
 
     this.bindResizeHandle(el, card);
 
@@ -2195,7 +2208,7 @@ export class FreeformRenderer extends Component {
         void this.fetchAndUpdateBookmark(card, el);
       }));
       menu.addItem(i => i.setTitle('Copy URL').setIcon('copy').onClick(() => {
-        navigator.clipboard.writeText(card.url); new Notice('URL copied.');
+        void navigator.clipboard.writeText(card.url); new Notice('URL copied.');
       }));
     }
 
@@ -2408,23 +2421,25 @@ export class FreeformRenderer extends Component {
     const file = this.app.vault.getAbstractFileByPath(target.path);
     if (!file) { new Notice(`Target no longer exists: ${target.path}`); return; }
     if (target.kind === 'note' || target.kind === 'canvas') {
+      if (!(file instanceof TFile)) return;
       const leaf = this.app.workspace.getLeaf('tab');
-      await leaf.openFile(file as TFile); this.app.workspace.revealLeaf(leaf); return;
+      await leaf.openFile(file); void this.app.workspace.revealLeaf(leaf); return;
     }
 
     if (target.kind === 'kanban') {
+      if (!(file instanceof TFile)) return;
       const leaf = this.app.workspace.getLeaf('tab');
-      await leaf.openFile(file as TFile); this.app.workspace.revealLeaf(leaf);
-      const isInstalled = (this.app as any).plugins?.enabledPlugins?.has('obsidian-kanban') ?? false;
+      await leaf.openFile(file); void this.app.workspace.revealLeaf(leaf);
+      const isInstalled = (this.app as AppWithPrivateAPIs).plugins?.enabledPlugins?.has('obsidian-kanban') ?? false;
       if (!isInstalled) new Notice('Install the community "Kanban" plugin to view this as a board.');
       return;
     }
     if (target.kind === 'folder') {
-      const folder = file as TFolder;
+      if (!(file instanceof TFolder)) return;
       const ex = this.app.workspace.getLeavesOfType('file-explorer');
-      if (ex.length > 0) { const v = ex[0].view as any; if (typeof v.revealInFolder === 'function') v.revealInFolder(folder); }
-      const firstNote = folder.children?.find(f => f instanceof TFile && (f as TFile).extension === 'md') as TFile | undefined;
-      if (firstNote) { const leaf = this.app.workspace.getLeaf('tab'); await leaf.openFile(firstNote); this.app.workspace.revealLeaf(leaf); }
+      if (ex.length > 0) { const v = ex[0].view as any; if (typeof v.revealInFolder === 'function') v.revealInFolder(file); }
+      const firstNote = file.children?.find((f): f is TFile => f instanceof TFile && f.extension === 'md');
+      if (firstNote) { const leaf = this.app.workspace.getLeaf('tab'); await leaf.openFile(firstNote); void this.app.workspace.revealLeaf(leaf); }
     }
   }
 
@@ -2432,7 +2447,7 @@ export class FreeformRenderer extends Component {
     const file = this.app.vault.getAbstractFileByPath(card.path);
     if (!(file instanceof TFile)) { new Notice(`Note no longer exists: ${card.path}`); return; }
     const leaf = this.app.workspace.getLeaf('tab');
-    await leaf.openFile(file); this.app.workspace.revealLeaf(leaf);
+    await leaf.openFile(file); void this.app.workspace.revealLeaf(leaf);
   }
 
   private openImageSource(card: ImageCard): void {
@@ -2500,12 +2515,13 @@ export class FreeformRenderer extends Component {
       this.pushUndo(); this.board.cards.push(card); void this.saveNow();
       this.createCardEl(card); this.selection.select(card.id); this.refreshSelectionVisuals();
     };
-    const fromVault = () => new VaultImagePickerModal(this.app, async (f) => {
+    const fromVault = () => new VaultImagePickerModal(this.app, (f) => { void (async () => {
       const newPath = await sortAssetFile(this.app, f);
-      const newFile = this.app.vault.getAbstractFileByPath(newPath) as TFile;
+      const newFile = this.app.vault.getAbstractFileByPath(newPath);
+      if (!(newFile instanceof TFile)) return;
       const h = await this.measureImageH(this.app.vault.getResourcePath(newFile));
       createCard(newPath, h);
-    }).open();
+    })(); }).open();
     const fromUpload = () => {
       const input = activeDocument.createElement('input');
       input.type = 'file'; input.accept = IMAGE_EXTS.map(e => `.${e}`).join(',');
@@ -2531,10 +2547,10 @@ export class FreeformRenderer extends Component {
       this.pushUndo(); this.board.cards.push(card); void this.saveNow();
       this.createCardEl(card); this.selection.select(card.id); this.refreshSelectionVisuals();
     };
-    const fromVault = () => new VaultAudioPickerModal(this.app, async (f) => {
+    const fromVault = () => new VaultAudioPickerModal(this.app, (f) => { void (async () => {
       const newPath = await sortAssetFile(this.app, f);
       createCard(newPath);
-    }).open();
+    })(); }).open();
     const fromUpload = () => {
       const input = activeDocument.createElement('input');
       input.type = 'file'; input.accept = AUDIO_EXTS.map(e => `.${e}`).join(',');
@@ -2601,7 +2617,9 @@ export class FreeformRenderer extends Component {
     let path: string;
     try { path = await saveNewAsset(this.app, await file.arrayBuffer(), filename); }
     catch { new Notice('Failed to save pasted image.'); return; }
-    const h = await this.measureImageH(this.app.vault.getResourcePath(this.app.vault.getAbstractFileByPath(path) as TFile));
+    const pastedFile = this.app.vault.getAbstractFileByPath(path);
+    if (!(pastedFile instanceof TFile)) return;
+    const h = await this.measureImageH(this.app.vault.getResourcePath(pastedFile));
     const { x, y } = this.centerPos(IMAGE_DEFAULT_W, h);
     const card: ImageCard = { id: crypto.randomUUID(), kind: 'image', x, y, w: IMAGE_DEFAULT_W, h, z: this.nextZ(), source: { type: 'vault', path }, captionHidden: true };
     this.pushUndo(); this.board.cards.push(card); await this.saveNow();
@@ -2660,9 +2678,10 @@ export class FreeformRenderer extends Component {
 
   private isDropAccepted(e: DragEvent): boolean {
     if (e.dataTransfer?.types.includes('Files')) return true;
-    const draggable = (this.app as any).dragManager?.draggable;
-    if (draggable?.type !== 'file' || !draggable.file) return false;
-    const ext = draggable.file?.extension?.toLowerCase() ?? '';
+    const dragMgr = (this.app as AppWithDragManager).dragManager;
+    const draggable = dragMgr?.draggable;
+    if (draggable?.type !== 'file' || !(draggable.file instanceof TFile)) return false;
+    const ext = draggable.file.extension.toLowerCase();
     return IMAGE_EXTS.includes(ext) || AUDIO_EXTS.includes(ext);
   }
 
@@ -3822,7 +3841,7 @@ export class FreeformRenderer extends Component {
       case 'notelink-open': {
         if (card?.kind !== 'note-link') return;
         const file = this.app.vault.getAbstractFileByPath(card.path);
-        if (file instanceof TFile) this.app.workspace.openLinkText(file.path, '', true);
+        if (file instanceof TFile) void this.app.workspace.openLinkText(file.path, '', true);
         break;
       }
       case 'bookmark-refresh': {
@@ -3834,7 +3853,7 @@ export class FreeformRenderer extends Component {
       }
       case 'bookmark-copy-url': {
         if (card?.kind !== 'bookmark') return;
-        navigator.clipboard.writeText(card.url); new Notice('URL copied.');
+        void navigator.clipboard.writeText(card.url); new Notice('URL copied.');
         break;
       }
       case 'kanban-color': {

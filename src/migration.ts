@@ -76,7 +76,7 @@ async function convertTile(app: App, tile: Tile, index: number): Promise<TileCar
     icon: tile.icon,
     color: tile.color,
     target: {
-      kind: tile.kind as 'folder' | 'canvas' | 'note',
+      kind: tile.kind,
       path: tile.targetPath ?? '',
     },
     order: index,
