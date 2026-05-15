@@ -28,14 +28,14 @@ export default class IconBoardPlugin extends Plugin {
 
     // Command: open default board
     this.addCommand({
-      id: 'open-icon-board',
+      id: 'open',
       name: 'Open',
       callback: () => { this.openDefaultBoard(); },
     });
 
     // Command: create a new board
     this.addCommand({
-      id: 'create-icon-board',
+      id: 'create-board',
       name: 'Create new board',
       callback: () => {
         new CreateBoardModal(this.app, this, async (file) => {
@@ -67,10 +67,6 @@ export default class IconBoardPlugin extends Plugin {
         await this.openDefaultBoard();
       }
     });
-  }
-
-  async onunload(): Promise<void> {
-    this.app.workspace.detachLeavesOfType(ICON_BOARD_VIEW_TYPE);
   }
 
   async loadSettings(): Promise<void> {

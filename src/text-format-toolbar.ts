@@ -68,22 +68,22 @@ export class TextFormatToolbar {
     this.buildSection(pop, 'Highlight', HIGHLIGHT_COLORS, hex => this.applyHighlight(hex), 'highlight');
 
     this.position(pop);
-    setTimeout(() => document.addEventListener('mousedown', this.onOutside), 0);
+    window.setTimeout(() => document.addEventListener('mousedown', this.onOutside), 0);
   }
 
   private buildFormatRow(parent: HTMLElement): void {
     const row = parent.createDiv('icon-board-text-fmt-inline-row');
-    const mkBtn = (label: string, tag: string, title: string, style?: string) => {
+    const mkBtn = (label: string, tag: string, title: string, cls?: string) => {
       const btn = row.createDiv('icon-board-text-fmt-inline-btn');
       btn.setAttribute('title', title);
-      if (style) btn.style.cssText = style;
+      if (cls) btn.addClass(cls);
       btn.createEl('span', { text: label });
       btn.addEventListener('click', () => this.applyInlineTag(tag));
     };
-    mkBtn('B', 'strong', 'Bold (⌘B)', 'font-weight:700');
-    mkBtn('I', 'em',     'Italic (⌘I)', 'font-style:italic');
-    mkBtn('S', 's',      'Strikethrough (⌘⇧S)', 'text-decoration:line-through');
-    mkBtn('U', 'u',      'Underline (⌘U)', 'text-decoration:underline');
+    mkBtn('B', 'strong', 'Bold (⌘B)', 'ib-fmt-bold');
+    mkBtn('I', 'em',     'Italic (⌘I)', 'ib-fmt-italic');
+    mkBtn('S', 's',      'Strikethrough (⌘⇧S)', 'ib-fmt-strike');
+    mkBtn('U', 'u',      'Underline (⌘U)', 'ib-fmt-underline');
   }
 
   // ── Inline tag toggle (bold, italic, strikethrough, underline) ─
@@ -164,8 +164,8 @@ export class TextFormatToolbar {
   // ── Positioning (above the actual selected text) ───────────────
 
   private position(pop: HTMLElement): void {
-    pop.style.visibility = 'hidden';
-    requestAnimationFrame(() => {
+    pop.addClass('ib-invisible');
+    window.requestAnimationFrame(() => {
       if (!this.popover || !this.savedRange) return;
 
       const rects   = this.savedRange.getClientRects();
@@ -195,7 +195,7 @@ export class TextFormatToolbar {
 
       pop.style.top  = `${top}px`;
       pop.style.left = `${left}px`;
-      pop.style.visibility = '';
+      pop.removeClass('ib-invisible');
     });
   }
 

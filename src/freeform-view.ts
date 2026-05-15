@@ -60,7 +60,6 @@ const KANBAN_MIN_H        = 200;
 const DOT_SPACING         = 32;
 const MAX_UNDO            = 20;
 const DRAG_THRESHOLD      = 5;
-const BOOKMARK_REFETCH_MS = 30 * 24 * 60 * 60 * 1000;
 
 const IMAGE_EXTS = ['png', 'jpg', 'jpeg', 'gif', 'svg', 'webp', 'bmp', 'avif', 'ico'];
 
@@ -95,8 +94,6 @@ const KANBAN_COLORS: { color: string; name: string }[] = [
 
 // ── Type helpers ───────────────────────────────────────────────
 type SupportedCard = TileCard | StickyCard | ChecklistCard | NoteLinkCard | ImageCard | AudioCard | BookmarkCard | KanbanColumnCard;
-
-function isSupportedCard(card: Card): card is SupportedCard { return true; }
 
 function cardMinSize(kind: Card['kind']): { w: number; h: number } {
   if (kind === 'sticky')    return { w: STICKY_MIN_W,    h: STICKY_MIN_H    };
@@ -156,11 +153,11 @@ class WipLimitModal extends Modal {
     });
     const input = this.contentEl.createEl('input');
     input.type = 'number'; input.min = '1'; input.placeholder = 'No limit';
-    input.style.cssText = 'width:100%;margin-bottom:12px;padding:6px 10px;border-radius:6px;border:1px solid var(--background-modifier-border);background:var(--background-primary);color:var(--text-normal);box-sizing:border-box;';
+    input.addClass('ib-modal-text-input');
     if (this.current !== undefined) input.value = String(this.current);
 
     const btnRow = this.contentEl.createDiv();
-    btnRow.style.cssText = 'display:flex;gap:8px;justify-content:flex-end;';
+    btnRow.addClass('ib-modal-btn-row');
     btnRow.createEl('button', { text: 'Cancel' }).addEventListener('click', () => this.close());
     const setBtn = btnRow.createEl('button', { text: 'Set', cls: 'mod-cta' });
     setBtn.addEventListener('click', () => this.submit(input.value));
@@ -168,7 +165,7 @@ class WipLimitModal extends Modal {
       if (e.key === 'Enter') { e.preventDefault(); this.submit(input.value); }
       if (e.key === 'Escape') this.close();
     });
-    setTimeout(() => { input.focus(); input.select(); }, 50);
+    window.setTimeout(() => { input.focus(); input.select(); }, 50);
   }
 
   private submit(raw: string): void {
@@ -211,9 +208,9 @@ class TagInputModal extends Modal {
     this.contentEl.createEl('h3', { text: 'Add tag' });
     const input = this.contentEl.createEl('input');
     input.type = 'text'; input.placeholder = 'tag name (no #)';
-    input.style.cssText = 'width:100%;margin-bottom:12px;padding:6px 10px;border-radius:6px;border:1px solid var(--background-modifier-border);background:var(--background-primary);color:var(--text-normal);box-sizing:border-box;';
+    input.addClass('ib-modal-text-input');
     const btnRow = this.contentEl.createDiv();
-    btnRow.style.cssText = 'display:flex;gap:8px;justify-content:flex-end;';
+    btnRow.addClass('ib-modal-btn-row');
     btnRow.createEl('button', { text: 'Cancel' }).addEventListener('click', () => this.close());
     const addBtn = btnRow.createEl('button', { text: 'Add', cls: 'mod-cta' });
     const submit = () => {
@@ -226,7 +223,7 @@ class TagInputModal extends Modal {
       if (e.key === 'Enter') { e.preventDefault(); submit(); }
       if (e.key === 'Escape') this.close();
     });
-    setTimeout(() => input.focus(), 50);
+    window.setTimeout(() => input.focus(), 50);
   }
   onClose(): void { this.contentEl.empty(); }
 }
@@ -238,10 +235,10 @@ class BookmarkInputModal extends Modal {
     this.contentEl.createEl('h3', { text: 'Add bookmark' });
     const input = this.contentEl.createEl('input', { cls: 'icon-board-bookmark-url-input' });
     input.type = 'text'; input.placeholder = 'https://…';
-    input.style.cssText = 'width:100%;margin-bottom:12px;padding:6px 10px;border-radius:6px;border:1px solid var(--background-modifier-border);background:var(--background-primary);color:var(--text-normal);box-sizing:border-box;';
+    input.addClass('ib-modal-text-input');
 
     const btnRow = this.contentEl.createDiv();
-    btnRow.style.cssText = 'display:flex;gap:8px;justify-content:flex-end;';
+    btnRow.addClass('ib-modal-btn-row');
     const cancel = btnRow.createEl('button', { text: 'Cancel' });
     cancel.addEventListener('click', () => this.close());
     const add = btnRow.createEl('button', { text: 'Add', cls: 'mod-cta' });
@@ -251,7 +248,7 @@ class BookmarkInputModal extends Modal {
       if (e.key === 'Enter') { e.preventDefault(); this.submit(input.value); }
       if (e.key === 'Escape') this.close();
     });
-    setTimeout(() => input.focus(), 50);
+    window.setTimeout(() => input.focus(), 50);
   }
 
   private submit(raw: string): void {
@@ -333,8 +330,7 @@ export class FreeformRenderer extends Component {
   // ── Lifecycle ──────────────────────────────────────────────────
 
   render(): void {
-    this.container.style.overflow = 'hidden';
-    this.container.style.position = 'relative';
+    this.container.addClass('ib-freeform-host');
     this.container.empty();
     this.cardEls.clear();
     this.connectionPaths.clear();
@@ -344,7 +340,7 @@ export class FreeformRenderer extends Component {
     if (this.board.dotsHidden) this.outer.addClass('no-dots');
     this.inner = this.outer.createDiv('icon-board-canvas-inner');
     this.marqueeEl = this.outer.createDiv('icon-board-marquee');
-    this.marqueeEl.style.display = 'none';
+    this.marqueeEl.hide();
 
     // SVG connection layer goes first so it renders behind cards
     this.initConnectionLayer();
@@ -367,7 +363,7 @@ export class FreeformRenderer extends Component {
       }
     }
 
-    setTimeout(() => this.outer.focus(), 0);
+    window.setTimeout(() => this.outer.focus(), 0);
   }
 
   destroy(): void {
@@ -375,8 +371,13 @@ export class FreeformRenderer extends Component {
     this.deselectConnection();
     document.removeEventListener('keydown', this.docKeyDown);
     document.removeEventListener('keyup', this.docKeyUp);
-    if (this.saveTimer) { clearTimeout(this.saveTimer); this.saveTimer = null; }
+    if (this.saveTimer) { window.clearTimeout(this.saveTimer); this.saveTimer = null; }
     this.unload();
+  }
+
+  private setCursor(cursor: '' | 'grab' | 'grabbing' | 'crosshair'): void {
+    this.outer.removeClass('ib-cursor-grab', 'ib-cursor-grabbing', 'ib-cursor-crosshair');
+    if (cursor) this.outer.addClass(`ib-cursor-${cursor}`);
   }
 
   // ── Viewport ───────────────────────────────────────────────────
@@ -429,13 +430,13 @@ export class FreeformRenderer extends Component {
     this.docKeyDown = (e: KeyboardEvent) => {
       if (e.code === 'Space' && document.activeElement === this.outer) {
         e.preventDefault(); this.spaceDown = true;
-        if (!this.isPanning) this.outer.style.cursor = 'grab';
+        if (!this.isPanning) this.setCursor('grab');
       }
     };
     this.docKeyUp = (e: KeyboardEvent) => {
       if (e.code === 'Space') {
         this.spaceDown = false;
-        if (!this.isPanning) this.outer.style.cursor = '';
+        if (!this.isPanning) this.setCursor('');
       }
     };
     document.addEventListener('keydown', this.docKeyDown);
@@ -594,7 +595,7 @@ export class FreeformRenderer extends Component {
   // ── Pan ────────────────────────────────────────────────────────
 
   private startPan(e: PointerEvent): void {
-    this.isPanning = true; this.outer.style.cursor = 'grabbing';
+    this.isPanning = true; this.setCursor('grabbing');
     const sx = e.clientX, sy = e.clientY, svx = this.vp.x, svy = this.vp.y;
     const pid = e.pointerId;
     // Use window capture-phase listeners so autoscroll or child stopPropagation
@@ -608,7 +609,7 @@ export class FreeformRenderer extends Component {
       if (ue.pointerId !== pid) return;
       window.removeEventListener('pointermove', onMove, true);
       window.removeEventListener('pointerup', onUp, true);
-      this.isPanning = false; this.outer.style.cursor = this.spaceDown ? 'grab' : ''; this.scheduleSave();
+      this.isPanning = false; this.setCursor(this.spaceDown ? 'grab' : ''); this.scheduleSave();
     };
     window.addEventListener('pointermove', onMove, true);
     window.addEventListener('pointerup', onUp, true);
@@ -619,7 +620,11 @@ export class FreeformRenderer extends Component {
   private startMarquee(e: PointerEvent): void {
     const rect = this.outer.getBoundingClientRect();
     const sx = e.clientX - rect.left, sy = e.clientY - rect.top;
-    this.marqueeEl.style.cssText = `display:block;left:${sx}px;top:${sy}px;width:0;height:0;`;
+    this.marqueeEl.style.left = `${sx}px`;
+    this.marqueeEl.style.top = `${sy}px`;
+    this.marqueeEl.style.width = '0';
+    this.marqueeEl.style.height = '0';
+    this.marqueeEl.show();
     this.outer.setPointerCapture(e.pointerId);
     const onMove = (e: PointerEvent) => {
       const cx = e.clientX - rect.left, cy = e.clientY - rect.top;
@@ -630,7 +635,7 @@ export class FreeformRenderer extends Component {
     };
     const onUp = (e: PointerEvent) => {
       this.outer.removeEventListener('pointermove', onMove); this.outer.removeEventListener('pointerup', onUp);
-      this.marqueeEl.style.display = 'none';
+      this.marqueeEl.hide();
       const cx = e.clientX - rect.left, cy = e.clientY - rect.top;
       const mL = Math.min(sx, cx), mT = Math.min(sy, cy), mR = Math.max(sx, cx), mB = Math.max(sy, cy);
       if (mR - mL < 4 && mB - mT < 4) return;
@@ -755,8 +760,9 @@ export class FreeformRenderer extends Component {
 
     const editor = inner.createDiv('icon-board-sticky-editor') as HTMLElement;
     editor.contentEditable = 'true';
-    editor.innerHTML = card.text ? textEl.innerHTML : '';
-    textEl.style.display = 'none';
+    editor.empty();
+    if (card.text) editor.appendChild(sanitizeHTMLToDom(textEl.innerHTML));
+    textEl.hide();
 
     editor.focus();
     const r = document.createRange();
@@ -851,7 +857,7 @@ export class FreeformRenderer extends Component {
       cleanup();
       this.pushUndo();
       card.text = editor.innerHTML;
-      editor.remove(); textEl.style.display = '';
+      editor.remove(); textEl.show();
       textEl.empty();
       MarkdownRenderer.render(this.app, card.text || '*Double-click to edit…*', textEl, '', this);
       this.scheduleSave();
@@ -861,7 +867,7 @@ export class FreeformRenderer extends Component {
       if (e.key === 'Escape') {
         e.preventDefault(); cleanup();
         editor.removeEventListener('blur', commit);
-        editor.remove(); textEl.style.display = '';
+        editor.remove(); textEl.show();
       }
     });
   }
@@ -949,7 +955,7 @@ export class FreeformRenderer extends Component {
         card.items.splice(idx + 1, 0, ni);
         const nr = this.appendChecklistItem(listEl, card, ni);
         row.after(nr);
-        setTimeout(() => nr.querySelector<HTMLElement>('.icon-board-checklist-item-input')?.focus(), 0);
+        window.setTimeout(() => nr.querySelector<HTMLElement>('.icon-board-checklist-item-input')?.focus(), 0);
       }
       if (e.key === 'Tab') {
         e.preventDefault(); e.stopPropagation();
@@ -1020,7 +1026,7 @@ export class FreeformRenderer extends Component {
         e.preventDefault();
         if (!input.value.trim()) return;
         commit();
-        setTimeout(() => listEl.querySelector<HTMLInputElement>('.icon-board-checklist-ghost .icon-board-checklist-item-input')?.focus(), 0);
+        window.setTimeout(() => listEl.querySelector<HTMLInputElement>('.icon-board-checklist-ghost .icon-board-checklist-item-input')?.focus(), 0);
       } else if (e.key === 'Escape') {
         e.preventDefault(); input.value = ''; input.blur();
       }
@@ -1164,15 +1170,16 @@ export class FreeformRenderer extends Component {
 
     const captionEditor = captionWrap.createDiv('icon-board-image-caption-editor') as HTMLElement;
     captionEditor.contentEditable = 'true';
-    captionEditor.style.display = 'none';
+    captionEditor.hide();
     captionEditor.addEventListener('pointerdown', e => e.stopPropagation());
 
     let captionFmtToolbar: TextFormatToolbar | null = null;
 
     const enterCaptionEdit = () => {
-      captionViewEl.style.display = 'none';
-      captionEditor.style.display = '';
-      captionEditor.innerHTML = card.caption ? captionViewEl.innerHTML : '';
+      captionViewEl.hide();
+      captionEditor.show();
+      captionEditor.empty();
+      if (card.caption) captionEditor.appendChild(sanitizeHTMLToDom(captionViewEl.innerHTML));
       captionEditor.focus();
       const r = document.createRange();
       r.selectNodeContents(captionEditor); r.collapse(false);
@@ -1184,8 +1191,8 @@ export class FreeformRenderer extends Component {
     const exitCaptionEdit = () => {
       captionFmtToolbar?.destroy(); captionFmtToolbar = null;
       card.caption = captionEditor.innerHTML;
-      captionEditor.style.display = 'none';
-      captionViewEl.style.display = '';
+      captionEditor.hide();
+      captionViewEl.show();
       renderCaptionView();
       this.scheduleSave();
     };
@@ -1199,8 +1206,8 @@ export class FreeformRenderer extends Component {
         e.preventDefault();
         captionFmtToolbar?.destroy(); captionFmtToolbar = null;
         captionEditor.removeEventListener('blur', exitCaptionEdit);
-        captionEditor.style.display = 'none';
-        captionViewEl.style.display = '';
+        captionEditor.hide();
+        captionViewEl.show();
         renderCaptionView();
       }
     });
@@ -1384,7 +1391,7 @@ export class FreeformRenderer extends Component {
       color: '#6b7280',
       items: [],
     };
-    this.pushUndo(); this.board.cards.push(card); this.saveNow();
+    this.pushUndo(); this.board.cards.push(card); void this.saveNow();
     this.createCardEl(card); this.selection.select(card.id); this.refreshSelectionVisuals();
   }
 
@@ -1465,7 +1472,7 @@ export class FreeformRenderer extends Component {
       e.stopPropagation();
     });
     input.addEventListener('blur', commit);
-    requestAnimationFrame(() => { input.focus(); input.select(); });
+    window.requestAnimationFrame(() => { input.focus(); input.select(); });
   }
 
   private appendKanbanItem(itemsEl: HTMLElement, card: KanbanColumnCard, item: KanbanItem): void {
@@ -1660,12 +1667,13 @@ export class FreeformRenderer extends Component {
 
     const original = item.text;
     const seedHTML = textEl.innerHTML;
-    textEl.style.display = 'none';
+    textEl.hide();
     itemEl.addClass('is-editing');
 
     const editor = bodyEl.createDiv('icon-board-kanban-item-editor') as HTMLElement;
     editor.contentEditable = 'true';
-    editor.innerHTML = item.text ? seedHTML : '';
+    editor.empty();
+    if (item.text) editor.appendChild(sanitizeHTMLToDom(seedHTML));
     editor.addEventListener('pointerdown', e => e.stopPropagation());
 
     const fmtToolbar = new TextFormatToolbar(editor, itemEl, this.container);
@@ -1677,7 +1685,7 @@ export class FreeformRenderer extends Component {
       itemEl.removeClass('is-editing');
       fmtToolbar.destroy();
       const html = editor.innerHTML;
-      editor.remove(); textEl.style.display = '';
+      editor.remove(); textEl.show();
       const isEmpty = !html || html === '<br>' || !html.trim();
       if (isEmpty) {
         this.pushUndo();
@@ -1704,7 +1712,7 @@ export class FreeformRenderer extends Component {
         committed = true;
         fmtToolbar.destroy();
         editor.removeEventListener('blur', commit);
-        editor.remove(); textEl.style.display = '';
+        editor.remove(); textEl.show();
         itemEl.removeClass('is-editing');
         if (!original) {
           card.items = card.items.filter(i => i.id !== item.id);
@@ -1718,7 +1726,7 @@ export class FreeformRenderer extends Component {
       }
     });
 
-    requestAnimationFrame(() => {
+    window.requestAnimationFrame(() => {
       editor.focus();
       const r = document.createRange();
       r.selectNodeContents(editor); r.collapse(false);
@@ -1766,7 +1774,7 @@ export class FreeformRenderer extends Component {
     ghost.style.width = `${itemRect.width}px`;
     ghost.style.left = `${itemRect.left}px`;
     ghost.style.top = `${itemRect.top}px`;
-    ghost.style.pointerEvents = 'none';
+    ghost.addClass('ib-no-pointer');
     document.body.appendChild(ghost);
 
     itemEl.addClass('is-dragging');
@@ -2147,7 +2155,7 @@ export class FreeformRenderer extends Component {
         card.items.push(newItem);
         const row = this.appendChecklistItem(listEl, card, newItem);
         listEl.appendChild(row);
-        setTimeout(() => row.querySelector<HTMLElement>('.icon-board-checklist-item-input')?.focus(), 0);
+        window.setTimeout(() => row.querySelector<HTMLElement>('.icon-board-checklist-item-input')?.focus(), 0);
         this.scheduleSave();
       }));
       menu.addSeparator();
@@ -2508,7 +2516,7 @@ export class FreeformRenderer extends Component {
   private addSticky(): void { const p = this.centerPos(STICKY_DEFAULT_W, STICKY_DEFAULT_H); this.addStickyAt(p.x, p.y); }
   private addStickyAt(x: number, y: number, initialText = ''): void {
     const card: StickyCard = { id: crypto.randomUUID(), kind: 'sticky', x, y, w: STICKY_DEFAULT_W, z: this.nextZ(), text: initialText, color: this.defaultStickyColor ?? STICKY_COLORS[0].color };
-    this.pushUndo(); this.board.cards.push(card); this.saveNow();
+    this.pushUndo(); this.board.cards.push(card); void this.saveNow();
     const el = this.createCardEl(card);
     this.selection.select(card.id); this.refreshSelectionVisuals();
     if (!initialText) this.editStickyInline(el, card);
@@ -2517,17 +2525,17 @@ export class FreeformRenderer extends Component {
   private addChecklist(): void { const p = this.centerPos(CHECKLIST_DEFAULT_W, CHECKLIST_DEFAULT_H); this.addChecklistAt(p.x, p.y); }
   private addChecklistAt(x: number, y: number): void {
     const card: ChecklistCard = { id: crypto.randomUUID(), kind: 'checklist', x, y, w: CHECKLIST_DEFAULT_W, h: CHECKLIST_DEFAULT_H, z: this.nextZ(), title: '', accentColor: '#EF4444', items: [], color: 'var(--background-primary)' };
-    this.pushUndo(); this.board.cards.push(card); this.saveNow();
+    this.pushUndo(); this.board.cards.push(card); void this.saveNow();
     const el = this.createCardEl(card);
     this.selection.select(card.id); this.refreshSelectionVisuals();
-    setTimeout(() => (el.querySelector('.icon-board-checklist-title') as HTMLElement | null)?.focus(), 50);
+    window.setTimeout(() => (el.querySelector('.icon-board-checklist-title') as HTMLElement | null)?.focus(), 50);
   }
 
   private addNoteLink(): void { const p = this.centerPos(NOTELINK_DEFAULT_W, NOTELINK_DEFAULT_H); this.addNoteLinkAt(p.x, p.y); }
   private addNoteLinkAt(x: number, y: number): void {
     new NoteLinkPickerModal(this.app, (file) => {
       const card: NoteLinkCard = { id: crypto.randomUUID(), kind: 'note-link', x, y, w: NOTELINK_DEFAULT_W, h: NOTELINK_DEFAULT_H, z: this.nextZ(), path: file.path, displayMode: 'preview' };
-      this.pushUndo(); this.board.cards.push(card); this.saveNow();
+      this.pushUndo(); this.board.cards.push(card); void this.saveNow();
       this.createCardEl(card); this.selection.select(card.id); this.refreshSelectionVisuals();
     }).open();
   }
@@ -2536,7 +2544,7 @@ export class FreeformRenderer extends Component {
   private addImageAt(x: number, y: number): void {
     const createCard = (path: string, h: number) => {
       const card: ImageCard = { id: crypto.randomUUID(), kind: 'image', x, y, w: IMAGE_DEFAULT_W, h, z: this.nextZ(), source: { type: 'vault', path }, captionHidden: true };
-      this.pushUndo(); this.board.cards.push(card); this.saveNow();
+      this.pushUndo(); this.board.cards.push(card); void this.saveNow();
       this.createCardEl(card); this.selection.select(card.id); this.refreshSelectionVisuals();
     };
     const fromVault = () => new VaultImagePickerModal(this.app, async (f) => {
@@ -2567,7 +2575,7 @@ export class FreeformRenderer extends Component {
   private addAudioAt(x: number, y: number): void {
     const createCard = (path: string) => {
       const card: AudioCard = { id: crypto.randomUUID(), kind: 'audio', x, y, w: AUDIO_DEFAULT_W, h: AUDIO_DEFAULT_H, z: this.nextZ(), source: { type: 'vault', path } };
-      this.pushUndo(); this.board.cards.push(card); this.saveNow();
+      this.pushUndo(); this.board.cards.push(card); void this.saveNow();
       this.createCardEl(card); this.selection.select(card.id); this.refreshSelectionVisuals();
     };
     const fromVault = () => new VaultAudioPickerModal(this.app, async (f) => {
@@ -2599,7 +2607,7 @@ export class FreeformRenderer extends Component {
 
   private createBookmarkCard(x: number, y: number, url: string): void {
     const card: BookmarkCard = { id: crypto.randomUUID(), kind: 'bookmark', x, y, w: BOOKMARK_DEFAULT_W, h: BOOKMARK_DEFAULT_H, z: this.nextZ(), url };
-    this.pushUndo(); this.board.cards.push(card); this.saveNow();
+    this.pushUndo(); this.board.cards.push(card); void this.saveNow();
     const el = this.createCardEl(card);
     this.selection.select(card.id); this.refreshSelectionVisuals();
     this.fetchAndUpdateBookmark(card, el);
@@ -2838,14 +2846,14 @@ export class FreeformRenderer extends Component {
     this.pendingTool = name;
     this.pendingToolBtn = btn;
     btn.addClass('is-active');
-    this.outer.style.cursor = 'crosshair';
+    this.setCursor('crosshair');
   }
 
   private clearPendingTool(): void {
     this.pendingToolBtn?.removeClass('is-active');
     this.pendingTool = null;
     this.pendingToolBtn = null;
-    if (!this.connectMode) this.outer.style.cursor = '';
+    if (!this.connectMode) this.setCursor('');
   }
 
   private placePendingTool(cx: number, cy: number): void {
@@ -3061,7 +3069,7 @@ export class FreeformRenderer extends Component {
         document.removeEventListener('mousedown', onOutside);
       }
     };
-    setTimeout(() => document.addEventListener('mousedown', onOutside), 0);
+    window.setTimeout(() => document.addEventListener('mousedown', onOutside), 0);
   }
 
   private closeOverflow(): void {
@@ -3125,7 +3133,7 @@ export class FreeformRenderer extends Component {
     const dismiss = (e: MouseEvent) => {
       if (!pop.contains(e.target as Node)) { pop.remove(); document.removeEventListener('mousedown', dismiss); }
     };
-    setTimeout(() => document.addEventListener('mousedown', dismiss), 0);
+    window.setTimeout(() => document.addEventListener('mousedown', dismiss), 0);
   }
 
   // ── Zoom pill ──────────────────────────────────────────────────
@@ -3186,7 +3194,6 @@ export class FreeformRenderer extends Component {
     // Visual layer — behind cards (first child of inner)
     const svg = document.createElementNS(ns, 'svg') as SVGSVGElement;
     svg.classList.add('icon-board-connections-svg');
-    svg.style.cssText = 'position:absolute;top:0;left:0;width:1px;height:1px;overflow:visible;pointer-events:none;';
     this.svgDefs = document.createElementNS(ns, 'defs') as SVGDefsElement;
     svg.appendChild(this.svgDefs);
     if (this.inner.firstChild) this.inner.insertBefore(svg, this.inner.firstChild);
@@ -3196,7 +3203,6 @@ export class FreeformRenderer extends Component {
     // Hit layer — above all cards so connection lines are always clickable
     const hitSvg = document.createElementNS(ns, 'svg') as SVGSVGElement;
     hitSvg.classList.add('icon-board-connections-hit-svg');
-    hitSvg.style.cssText = 'position:absolute;top:0;left:0;width:1px;height:1px;overflow:visible;pointer-events:none;z-index:9999;';
     this.inner.appendChild(hitSvg);
     this.hitSvgEl = hitSvg;
   }
@@ -3225,8 +3231,8 @@ export class FreeformRenderer extends Component {
     hit.setAttribute('stroke-opacity', '0');
     hit.setAttribute('stroke-width', '12');
     hit.setAttribute('fill', 'none');
-    hit.style.cursor = 'pointer';
-    hit.style.pointerEvents = 'stroke';
+    hit.setAttribute('cursor', 'pointer');
+    hit.setAttribute('pointer-events', 'stroke');
     hit.addEventListener('click', (e) => { e.stopPropagation(); this.selectConnection(conn.id); });
     hit.addEventListener('contextmenu', (e) => {
       e.preventDefault(); e.stopPropagation();
@@ -3246,7 +3252,7 @@ export class FreeformRenderer extends Component {
     path.setAttribute('fill', 'none');
     path.setAttribute('stroke-linecap', 'butt');
     path.setAttribute('stroke-linejoin', 'round');
-    path.style.pointerEvents = 'none';
+    path.setAttribute('pointer-events', 'none');
     if (conn.style === 'dashed') {
       path.setAttribute('stroke-dasharray', `${conn.thickness * 5} ${conn.thickness * 4}`);
     }
@@ -3295,7 +3301,7 @@ export class FreeformRenderer extends Component {
     const pos = this.connectionLabelPos(conn); if (!pos) return;
     const ns = 'http://www.w3.org/2000/svg';
     const g = document.createElementNS(ns, 'g') as SVGGElement;
-    g.style.pointerEvents = 'none';
+    g.setAttribute('pointer-events', 'none');
     const bg = getComputedStyle(document.body).getPropertyValue('--background-primary').trim() || '#ffffff';
     const addText = (strokeColor: string | null, fillColor: string) => {
       const t = document.createElementNS(ns, 'text') as SVGTextElement;
@@ -3444,7 +3450,7 @@ export class FreeformRenderer extends Component {
       this.ghostPath.setAttribute('stroke-width', '1.5');
       this.ghostPath.setAttribute('stroke-dasharray', '6 4');
       this.ghostPath.setAttribute('stroke-linecap', 'round');
-      this.ghostPath.style.pointerEvents = 'none';
+      this.ghostPath.setAttribute('pointer-events', 'none');
       this.svgEl.appendChild(this.ghostPath);
     }
     this.ghostPath.setAttribute('d', `M ${sx} ${sy} L ${tx} ${ty}`);
@@ -3510,9 +3516,7 @@ export class FreeformRenderer extends Component {
   }
 
   private resolveDefaultConnectionColor(): string {
-    const tmp = document.body.createDiv();
-    tmp.style.cssText = 'position:absolute;visibility:hidden;color:var(--text-muted)';
-    document.body.appendChild(tmp);
+    const tmp = document.body.createDiv('ib-color-probe');
     const computed = getComputedStyle(tmp).color;
     tmp.remove();
     const m = computed.match(/\d+/g);
@@ -3538,7 +3542,7 @@ export class FreeformRenderer extends Component {
     this.connectionSelectPath.setAttribute('stroke-opacity', '0.3');
     this.connectionSelectPath.setAttribute('fill', 'none');
     this.connectionSelectPath.setAttribute('stroke-linecap', 'round');
-    this.connectionSelectPath.style.pointerEvents = 'none';
+    this.connectionSelectPath.setAttribute('pointer-events', 'none');
     this.hitSvgEl.appendChild(this.connectionSelectPath);
     this.showConnectionProps(conn);
     this.contextBar?.showConn(conn);
@@ -3832,7 +3836,7 @@ export class FreeformRenderer extends Component {
         if (card.titleHidden) {
           card.titleHidden = false;
           this.rebuildChecklistCard(card); this.refreshSelectionVisuals();
-          setTimeout(() => (this.cardEls.get(card.id)?.querySelector<HTMLElement>('.icon-board-checklist-title'))?.focus(), 0);
+          window.setTimeout(() => (this.cardEls.get(card.id)?.querySelector<HTMLElement>('.icon-board-checklist-title'))?.focus(), 0);
         } else {
           card.titleHidden = true;
           this.rebuildChecklistCard(card); this.refreshSelectionVisuals();
@@ -3848,7 +3852,7 @@ export class FreeformRenderer extends Component {
         if (wrap) wrap.toggleClass('is-hidden', !!card.captionHidden);
         if (!card.captionHidden) {
           // Caption was just shown — click the view to enter edit mode
-          setTimeout(() => {
+          window.setTimeout(() => {
             el.querySelector<HTMLElement>('.icon-board-image-caption-view')?.click();
           }, 0);
         }
@@ -3921,7 +3925,7 @@ export class FreeformRenderer extends Component {
           this.rebuildKanbanCard(card);
           this.refreshSelectionVisuals();
           this.scheduleSave();
-          setTimeout(() => {
+          window.setTimeout(() => {
             const newEl = this.cardEls.get(card.id);
             const titleEl = newEl?.querySelector<HTMLElement>('.icon-board-kanban-title');
             if (newEl && titleEl) this.editKanbanTitle(card, newEl, titleEl);
@@ -3947,7 +3951,7 @@ export class FreeformRenderer extends Component {
         this.createCardEl(newCard);
         this.selection.select(newCard.id);
         this.refreshSelectionVisuals();
-        setTimeout(() => {
+        window.setTimeout(() => {
           const newEl = this.cardEls.get(newCard.id);
           const titleEl = newEl?.querySelector<HTMLElement>('.icon-board-kanban-title');
           if (newEl && titleEl) this.editKanbanTitle(newCard, newEl, titleEl);
@@ -4004,12 +4008,12 @@ export class FreeformRenderer extends Component {
 
   private scheduleSave(): void {
     this.board.viewport = { ...this.vp };
-    if (this.saveTimer) clearTimeout(this.saveTimer);
-    this.saveTimer = setTimeout(() => { this.saveTimer = null; this.saveNow(); }, 600);
+    if (this.saveTimer) window.clearTimeout(this.saveTimer);
+    this.saveTimer = window.setTimeout(() => { this.saveTimer = null; void this.saveNow(); }, 600);
   }
 
   private async saveNow(): Promise<void> {
-    if (this.saveTimer) { clearTimeout(this.saveTimer); this.saveTimer = null; }
+    if (this.saveTimer) { window.clearTimeout(this.saveTimer); this.saveTimer = null; }
     this.board.viewport = { ...this.vp };
     await this.onSave(this.board);
   }

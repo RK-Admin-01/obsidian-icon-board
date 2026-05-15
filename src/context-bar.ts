@@ -28,8 +28,6 @@ export type CtxEvent =
 
 // ── Colour palettes ───────────────────────────────────────────────────────────
 
-const STICKY_COLORS  = ['#FDE68A','#FCA5A5','#86EFAC','#93C5FD','#C4B5FD','#FBB6CE','#FCD34D','#A7F3D0','#D1D5DB','#F3F4F6'];
-const KANBAN_COLORS  = ['#6b7280','#ef4444','#f97316','#eab308','#22c55e','#3b82f6','#a855f7','#ec4899'];
 const ACCENT_COLORS  = ['#ef4444','#f97316','#eab308','#22c55e','#3b82f6','#a855f7','#ec4899','#6b7280','#14b8a6','#f43f5e','#8b5cf6','#84cc16'];
 const CONN_COLORS    = ['#6b7280','#ef4444','#f97316','#eab308','#22c55e','#3b82f6','#a855f7','#ec4899'];
 
@@ -50,7 +48,6 @@ export class ContextBar {
     private readonly emit: (e: CtxEvent) => void,
   ) {
     this.ctxPanelEl = this.toolbarEl.createDiv('ib-ctx-panel');
-    this.ctxPanelEl.style.pointerEvents = 'none';
   }
 
   // ── Public API ───────────────────────────────────────────────────────────────
@@ -83,12 +80,10 @@ export class ContextBar {
 
   private activate(): void {
     this.toolbarEl.addClass('ib-ctx-active');
-    this.ctxPanelEl.style.pointerEvents = '';
   }
 
   private deactivate(): void {
     this.toolbarEl.removeClass('ib-ctx-active');
-    this.ctxPanelEl.style.pointerEvents = 'none';
     this.cancelTrashConfirm();
   }
 
@@ -210,7 +205,7 @@ export class ContextBar {
           const sw = grid.createDiv('ib-ctx-color-swatch');
           sw.style.background = hex;
           if (['#FFFFFF','#F3F4F6','#E0F2FE','#F0F9FF'].includes(hex))
-            sw.style.boxShadow = 'inset 0 0 0 1px rgba(0,0,0,0.12)';
+            sw.addClass('ib-swatch-border-light');
           sw.addEventListener('click', () => onBg(hex));
         }
         this.mkCustomColor(swatchArea, onBg, () => {});
@@ -261,7 +256,7 @@ export class ContextBar {
       const sw = grid.createDiv('ib-ctx-color-swatch');
       sw.style.background = hex;
       if (['#F3F4F6','#D1D5DB'].includes(hex))
-        sw.style.boxShadow = 'inset 0 0 0 1px rgba(0,0,0,0.15)';
+        sw.addClass('ib-swatch-border-light');
       sw.addEventListener('click', () => { onSelect(hex); this.fill(card); });
     }
 

@@ -33,7 +33,7 @@ export class IconBoardSettingsTab extends PluginSettingTab {
   display(): void {
     const { containerEl } = this;
     containerEl.empty();
-    containerEl.createEl('h2', { text: 'Icon Board' });
+    new Setting(containerEl).setName('Icon Board').setHeading();
 
     // ── Open on startup ──────────────────────────────────────
     new Setting(containerEl)
@@ -82,7 +82,7 @@ export class IconBoardSettingsTab extends PluginSettingTab {
     }
 
     // ── Freeform canvas ──────────────────────────────────────
-    containerEl.createEl('h3', { text: 'Freeform canvas', cls: 'icon-board-settings-section' });
+    new Setting(containerEl).setName('Freeform canvas').setHeading();
 
     new Setting(containerEl)
       .setName('Toolbar position')
@@ -127,7 +127,7 @@ export class IconBoardSettingsTab extends PluginSettingTab {
           });
         text.inputEl.type = 'number';
         text.inputEl.min = '1';
-        text.inputEl.style.width = '70px';
+        text.inputEl.addClass('ib-bookmark-days-input');
       });
 
     const stickyColorSetting = new Setting(containerEl)
@@ -161,7 +161,7 @@ export class IconBoardSettingsTab extends PluginSettingTab {
     }
 
     // ── Assets ───────────────────────────────────────────────
-    containerEl.createEl('h3', { text: 'Assets', cls: 'icon-board-settings-section' });
+    new Setting(containerEl).setName('Assets').setHeading();
 
     new Setting(containerEl)
       .setName('Auto-sort assets')
@@ -197,7 +197,7 @@ export class IconBoardSettingsTab extends PluginSettingTab {
       );
 
     // ── Export ───────────────────────────────────────────────
-    containerEl.createEl('h3', { text: 'Data', cls: 'icon-board-settings-section' });
+    new Setting(containerEl).setName('Data').setHeading();
 
     new Setting(containerEl)
       .setName('Export tiles as JSON')
@@ -259,7 +259,7 @@ export class IconBoardSettingsTab extends PluginSettingTab {
       );
 
     // ── Reset ────────────────────────────────────────────────
-    containerEl.createEl('h3', { text: 'Danger zone', cls: 'icon-board-settings-section' });
+    new Setting(containerEl).setName('Danger zone').setHeading();
 
     new Setting(containerEl)
       .setName('Reset all tiles')

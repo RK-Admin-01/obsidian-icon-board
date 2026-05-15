@@ -26,7 +26,7 @@ async function ensureDir(app: App, dir: string): Promise<void> {
   for (const p of parts) {
     cur = cur ? `${cur}/${p}` : p;
     if (!app.vault.getAbstractFileByPath(cur)) {
-      try { await app.vault.createFolder(cur); } catch {}
+      try { await app.vault.createFolder(cur); } catch { /* folder may already exist */ }
     }
   }
 }

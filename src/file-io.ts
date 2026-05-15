@@ -17,7 +17,7 @@ export async function readBoardFile(app: App, file: TFile): Promise<IconBoardFil
       try { await writeBoardFile(app, file, parsed as IconBoardFile); } catch { /* silent */ }
     }
     return parsed as IconBoardFile;
-  } catch (e) {
+  } catch {
     // Save a backup then return an empty board
     const backupPath = file.path + '.bak';
     try {

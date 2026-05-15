@@ -2,7 +2,7 @@
   "id": "icon-board",
   "name": "Icon Board",
   "version": "1.0.0",
-  "minAppVersion": "1.4.0",
+  "minAppVersion": "1.7.2",
   "description": "A Milanote-style visual workspace with icon tiles, freeform canvas, kanban columns, sticky notes, checklists, images, audio, bookmarks, and note links. Assets auto-sort and broken links relink with one command.",
   "author": "RK-Media",
   "authorUrl": "https://github.com/RK-Admin-01",
