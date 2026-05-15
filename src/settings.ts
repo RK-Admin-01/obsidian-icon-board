@@ -237,7 +237,7 @@ export class IconBoardSettingsTab extends PluginSettingTab {
             }
             let parsed: Tile[];
             try {
-              parsed = JSON.parse(this.importText);
+              parsed = JSON.parse(this.importText) as Tile[];
               if (!Array.isArray(parsed)) throw new Error('Not an array');
             } catch {
               new Notice('Invalid JSON — please check the format and try again.');

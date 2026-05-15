@@ -15,7 +15,7 @@ export function needsMigration(settings: IconBoardSettings): boolean {
  */
 export async function migrateV1toV2(app: App, plugin: IconBoardPlugin): Promise<TFile> {
   // Keep a backup copy before clearing
-  plugin.settings.legacyBackup = JSON.parse(JSON.stringify(plugin.settings.rootTiles));
+  plugin.settings.legacyBackup = JSON.parse(JSON.stringify(plugin.settings.rootTiles)) as Tile[];
 
   const homeFile = await convertBoard(app, plugin.settings.rootTiles, 'Icon Board Home');
 

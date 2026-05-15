@@ -764,11 +764,11 @@ export class FreeformRenderer extends Component {
   }
 
   private editStickyInline(el: HTMLElement, card: StickyCard): void {
-    const textEl = el.querySelector('.icon-board-sticky-text') as HTMLElement | null;
+    const textEl = el.querySelector<HTMLElement>('.icon-board-sticky-text');
     if (!textEl || el.querySelector('.icon-board-sticky-editor')) return;
     const inner = el.querySelector<HTMLElement>('.icon-board-sticky-inner') ?? el;
 
-    const editor = inner.createDiv('icon-board-sticky-editor') as HTMLElement;
+    const editor = inner.createDiv('icon-board-sticky-editor');
     editor.contentEditable = 'true';
     editor.empty();
     if (card.text) editor.appendChild(sanitizeHTMLToDom(textEl.innerHTML));
@@ -1919,7 +1919,7 @@ export class FreeformRenderer extends Component {
       if (ogImg) { try { card.imageUrl = new URL(ogImg, card.url).href; } catch { card.imageUrl = ogImg; } }
 
       const origin = new URL(card.url).origin;
-      const favEl = doc.querySelector('link[rel~="icon"]') as HTMLLinkElement | null;
+      const favEl = doc.querySelector<HTMLLinkElement>('link[rel~="icon"]');
       const favHref = favEl?.getAttribute('href');
       if (favHref) { try { card.favicon = new URL(favHref, card.url).href; } catch { card.favicon = `${origin}/favicon.ico`; } }
       else { card.favicon = `${origin}/favicon.ico`; }
@@ -2030,7 +2030,7 @@ export class FreeformRenderer extends Component {
             if (!kEl) continue;
             const kr = kEl.getBoundingClientRect();
             if (elRect.left < kr.right && elRect.right > kr.left && elRect.top < kr.bottom && elRect.bottom > kr.top) {
-              found = kc as KanbanColumnCard; break;
+              found = kc; break;
             }
           }
           if (found !== hoveredKanban) {
@@ -2047,8 +2047,8 @@ export class FreeformRenderer extends Component {
           const targetCard = hoveredKanban;
           const kEl = this.cardEls.get(targetCard.id);
           const itemsEl = kEl?.querySelector<HTMLElement>('.icon-board-kanban-items');
-          if (itemsEl) {
-            const path = (card as ImageCard | AudioCard).source.path;
+          if (itemsEl && card.source.type === 'vault') {
+            const path = card.source.path;
             const item: KanbanItem = card.kind === 'image'
               ? { id: crypto.randomUUID(), text: '', imagePath: path }
               : { id: crypto.randomUUID(), text: '', audioPath: path };
@@ -2099,7 +2099,7 @@ export class FreeformRenderer extends Component {
           const idx = this.board.cards.findIndex(c => c.id === updated.id);
           if (idx !== -1) {
             this.board.cards[idx] = updated; this.cardEls.delete(card.id);
-            this.renderCardContent(el, updated as TileCard); this.bindCardEvents(el, updated as TileCard);
+            this.renderCardContent(el, updated); this.bindCardEvents(el, updated);
             this.cardEls.set(updated.id, el); void this.saveNow();
           }
         }, this.file).open();
@@ -2307,7 +2307,7 @@ export class FreeformRenderer extends Component {
 
         let imgAspect: number | null = null;
         if (card.kind === 'image') {
-          const imgEl = el.querySelector('.icon-board-image-img') as HTMLImageElement | null;
+          const imgEl = el.querySelector<HTMLImageElement>('.icon-board-image-img');
           imgAspect = (imgEl && imgEl.naturalWidth > 0 && imgEl.naturalHeight > 0)
             ? imgEl.naturalHeight / imgEl.naturalWidth
             : startH / startW;
@@ -2343,8 +2343,8 @@ export class FreeformRenderer extends Component {
 
           if (card.kind === 'tile') {
             const tileSize = Math.max(40, Math.min(card.w - 20, card.h - 50 - 16));
-            const sq = el.querySelector('.icon-board-freeform-tile-square') as HTMLElement | null;
-            const ic = el.querySelector('.icon-board-tile-icon') as HTMLElement | null;
+            const sq = el.querySelector<HTMLElement>('.icon-board-freeform-tile-square');
+            const ic = el.querySelector<HTMLElement>('.icon-board-tile-icon');
             if (sq) { sq.style.width = `${tileSize}px`; sq.style.height = `${tileSize}px`; sq.style.borderRadius = `${Math.round(tileSize * 0.2)}px`; }
             if (ic) {
               const is = Math.round(tileSize * 0.55);
@@ -2494,7 +2494,7 @@ export class FreeformRenderer extends Component {
     this.pushUndo(); this.board.cards.push(card); void this.saveNow();
     const el = this.createCardEl(card);
     this.selection.select(card.id); this.refreshSelectionVisuals();
-    window.setTimeout(() => (el.querySelector('.icon-board-checklist-title') as HTMLElement | null)?.focus(), 50);
+    window.setTimeout(() => el.querySelector<HTMLElement>('.icon-board-checklist-title')?.focus(), 50);
   }
 
   private addNoteLink(): void { const p = this.centerPos(NOTELINK_DEFAULT_W, NOTELINK_DEFAULT_H); this.addNoteLinkAt(p.x, p.y); }
@@ -3162,16 +3162,16 @@ export class FreeformRenderer extends Component {
     const ns = 'http://www.w3.org/2000/svg';
 
     // Visual layer — behind cards (first child of inner)
-    const svg = activeDocument.createElementNS(ns, 'svg') as SVGSVGElement;
+    const svg = activeDocument.createElementNS(ns, 'svg');
     svg.classList.add('icon-board-connections-svg');
-    this.svgDefs = activeDocument.createElementNS(ns, 'defs') as SVGDefsElement;
+    this.svgDefs = activeDocument.createElementNS(ns, 'defs');
     svg.appendChild(this.svgDefs);
     if (this.inner.firstChild) this.inner.insertBefore(svg, this.inner.firstChild);
     else this.inner.appendChild(svg);
     this.svgEl = svg;
 
     // Hit layer — above all cards so connection lines are always clickable
-    const hitSvg = activeDocument.createElementNS(ns, 'svg') as SVGSVGElement;
+    const hitSvg = activeDocument.createElementNS(ns, 'svg');
     hitSvg.classList.add('icon-board-connections-hit-svg');
     this.inner.appendChild(hitSvg);
     this.hitSvgEl = hitSvg;
@@ -3195,7 +3195,7 @@ export class FreeformRenderer extends Component {
     const ns = 'http://www.w3.org/2000/svg';
 
     // Wide transparent hit area for easy clicking
-    const hit = activeDocument.createElementNS(ns, 'path') as SVGPathElement;
+    const hit = activeDocument.createElementNS(ns, 'path');
     hit.setAttribute('d', d);
     hit.setAttribute('stroke', '#000000');
     hit.setAttribute('stroke-opacity', '0');
@@ -3215,7 +3215,7 @@ export class FreeformRenderer extends Component {
     this.connectionHitPaths.set(conn.id, hit);
 
     // Visible path (pointer-events:none so hit area handles all events)
-    const path = activeDocument.createElementNS(ns, 'path') as SVGPathElement;
+    const path = activeDocument.createElementNS(ns, 'path');
     path.setAttribute('d', d);
     path.setAttribute('stroke', conn.color);
     path.setAttribute('stroke-width', String(conn.thickness));
@@ -3270,11 +3270,11 @@ export class FreeformRenderer extends Component {
     if (!conn.label) return;
     const pos = this.connectionLabelPos(conn); if (!pos) return;
     const ns = 'http://www.w3.org/2000/svg';
-    const g = activeDocument.createElementNS(ns, 'g') as SVGGElement;
+    const g = activeDocument.createElementNS(ns, 'g');
     g.setAttribute('pointer-events', 'none');
     const bg = getComputedStyle(activeDocument.body).getPropertyValue('--background-primary').trim() || '#ffffff';
     const addText = (strokeColor: string | null, fillColor: string) => {
-      const t = activeDocument.createElementNS(ns, 'text') as SVGTextElement;
+      const t = activeDocument.createElementNS(ns, 'text');
       t.setAttribute('x', String(pos.x)); t.setAttribute('y', String(pos.y));
       t.setAttribute('text-anchor', 'middle'); t.setAttribute('dominant-baseline', 'central');
       t.setAttribute('font-size', '11');
@@ -3414,7 +3414,7 @@ export class FreeformRenderer extends Component {
   private updateGhostPath(sx: number, sy: number, tx: number, ty: number): void {
     if (!this.ghostPath) {
       const ns = 'http://www.w3.org/2000/svg';
-      this.ghostPath = activeDocument.createElementNS(ns, 'path') as SVGPathElement;
+      this.ghostPath = activeDocument.createElementNS(ns, 'path');
       this.ghostPath.setAttribute('fill', 'none');
       this.ghostPath.setAttribute('stroke', 'var(--interactive-accent)');
       this.ghostPath.setAttribute('stroke-width', '1.5');
@@ -3456,7 +3456,7 @@ export class FreeformRenderer extends Component {
   private cardIdAtPoint(clientX: number, clientY: number): string | null {
     const els = activeDocument.elementsFromPoint(clientX, clientY);
     for (const el of els) {
-      const cardEl = el.closest('[data-id]') as HTMLElement | null;
+      const cardEl = el.closest<HTMLElement>('[data-id]');
       if (cardEl?.dataset.id && this.cardEls.has(cardEl.dataset.id)) return cardEl.dataset.id;
     }
     return null;
@@ -3505,7 +3505,7 @@ export class FreeformRenderer extends Component {
     const d = this.buildConnectionPath(conn); if (!d) return;
 
     const ns = 'http://www.w3.org/2000/svg';
-    this.connectionSelectPath = activeDocument.createElementNS(ns, 'path') as SVGPathElement;
+    this.connectionSelectPath = activeDocument.createElementNS(ns, 'path');
     this.connectionSelectPath.setAttribute('d', d);
     this.connectionSelectPath.setAttribute('stroke', 'var(--interactive-accent)');
     this.connectionSelectPath.setAttribute('stroke-width', String(conn.thickness + 6));
@@ -3735,9 +3735,11 @@ export class FreeformRenderer extends Component {
       }
       case 'tile-edit': {
         if (card?.kind !== 'tile' || !el) return;
-        new TileModal(this.app, this.board.cards, card, () => {
-          this.renderCardContent(el, card); this.bindCardEvents(el, card); this.scheduleSave();
-        }).open();
+        new TileModal(this.app, card, (updated) => {
+          const idx = this.board.cards.findIndex(c => c.id === updated.id);
+          if (idx !== -1) this.board.cards[idx] = updated;
+          this.renderCardContent(el, updated); this.bindCardEvents(el, updated); this.scheduleSave();
+        }, this.file).open();
         break;
       }
       case 'sticky-format': {
