@@ -2,6 +2,7 @@ import { App, PluginSettingTab, Setting, Notice, FuzzySuggestModal, TFile } from
 import type IconBoardPlugin from './main';
 import { ConfirmModal } from './tile-modal';
 import { Tile } from './types';
+import { relinkAllBoards } from './asset-manager';
 
 // ── Board picker modal ────────────────────────────────────────
 
@@ -158,6 +159,42 @@ export class IconBoardSettingsTab extends PluginSettingTab {
         await this.plugin.saveSettings();
       });
     }
+
+    // ── Assets ───────────────────────────────────────────────
+    containerEl.createEl('h3', { text: 'Assets', cls: 'icon-board-settings-section' });
+
+    new Setting(containerEl)
+      .setName('Auto-sort assets')
+      .setDesc('All images, audio, video, and documents imported or linked into a board are automatically moved to _Assets/Images/, _Assets/Audio/, etc. in the vault root. Always on.')
+      .addText(t => { t.inputEl.disabled = true; t.setValue('Enabled'); });
+
+    new Setting(containerEl)
+      .setName('Auto-relink on board open')
+      .setDesc('When a board opens, silently scan for broken file links and fix any that have a unique filename match in the vault.')
+      .addToggle(toggle =>
+        toggle
+          .setValue(this.plugin.settings.autoRelinkOnOpen ?? false)
+          .onChange(async (value) => {
+            this.plugin.settings.autoRelinkOnOpen = value;
+            await this.plugin.saveSettings();
+          })
+      );
+
+    new Setting(containerEl)
+      .setName('Relink all boards now')
+      .setDesc('Scan every .iboard file in the vault and fix broken links with a unique filename match. Useful after moving files.')
+      .addButton(btn =>
+        btn.setButtonText('Relink now').onClick(async () => {
+          btn.setButtonText('Scanning…');
+          btn.buttonEl.disabled = true;
+          const n = await relinkAllBoards(this.app);
+          btn.setButtonText('Relink now');
+          btn.buttonEl.disabled = false;
+          new Notice(n > 0
+            ? `Fixed ${n} broken link${n === 1 ? '' : 's'} across all boards.`
+            : 'No broken links found.');
+        })
+      );
 
     // ── Export ───────────────────────────────────────────────
     containerEl.createEl('h3', { text: 'Data', cls: 'icon-board-settings-section' });

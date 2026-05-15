@@ -4,6 +4,7 @@ import { IconBoardFile } from './file-types';
 import { readBoardFile, writeBoardFile } from './file-io';
 import { GridRenderer } from './grid-view';
 import { FreeformRenderer } from './freeform-view';
+import { relinkBoardData } from './asset-manager';
 
 export const ICON_BOARD_VIEW_TYPE = 'icon-board-view';
 
@@ -44,6 +45,15 @@ export class IconBoardView extends FileView {
     this.isInternalNavigation = false;
 
     const board = await readBoardFile(this.app, file);
+
+    if (this.plugin.settings.autoRelinkOnOpen) {
+      const fixed = await relinkBoardData(this.app, board);
+      if (fixed > 0) {
+        await writeBoardFile(this.app, file, board);
+        new Notice(`Icon Board: Fixed ${fixed} broken link${fixed === 1 ? '' : 's'}.`);
+      }
+    }
+
     this.renderBoard(board, file);
   }
 

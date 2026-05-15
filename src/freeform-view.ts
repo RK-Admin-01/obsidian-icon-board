@@ -18,6 +18,8 @@ import {
   viewportTransform, screenToCanvas, clampZoom,
 } from './canvas/pan-zoom';
 import { SelectionManager } from './canvas/selection';
+import { ContextBar, CtxEvent } from './context-bar';
+import { sortAssetFile, saveNewAsset } from './asset-manager';
 
 // ── Constants ──────────────────────────────────────────────────
 const TILE_DEFAULT_W      = 140;
@@ -281,6 +283,7 @@ export class FreeformRenderer extends Component {
   private connectMoveListener: ((e: PointerEvent) => void) | null = null;
 
   private connectionHitPaths = new Map<string, SVGPathElement>();
+  private hitSvgEl!: SVGSVGElement;
   private connectionLabelEls = new Map<string, SVGGElement>();
   private connectionSelectPath: SVGPathElement | null = null;
   private selectedConnectionId: string | null = null;
@@ -301,6 +304,8 @@ export class FreeformRenderer extends Component {
   private pendingTool: string | null = null;
   private pendingToolBtn: HTMLElement | null = null;
   private overflowPopover: HTMLElement | null = null;
+  private contextBar!: ContextBar;
+  private activeStickyApplyTag: ((tag: string) => void) | null = null;
 
   private docKeyDown!: (e: KeyboardEvent) => void;
   private docKeyUp!: (e: KeyboardEvent) => void;
@@ -436,6 +441,18 @@ export class FreeformRenderer extends Component {
     document.addEventListener('keydown', this.docKeyDown);
     document.addEventListener('keyup', this.docKeyUp);
 
+    // Capture-phase listeners: intercept middle-click / space-drag over any child
+    // element before its stopPropagation can block panning.
+    // The mousedown guard prevents Chrome autoscroll on scrollable/image targets.
+    this.outer.addEventListener('mousedown', (e: MouseEvent) => {
+      if (e.button === 1) e.preventDefault();
+    }, { capture: true });
+    this.outer.addEventListener('pointerdown', (e) => {
+      if (e.button === 1 || (e.button === 0 && this.spaceDown)) {
+        e.preventDefault(); e.stopPropagation(); this.startPan(e);
+      }
+    }, { capture: true });
+
     this.outer.addEventListener('pointerdown', (e) => {
       const target = e.target as HTMLElement;
       const isBackground = target === this.outer || target === this.inner;
@@ -548,21 +565,24 @@ export class FreeformRenderer extends Component {
         const rect = this.outer.getBoundingClientRect();
         const cp = screenToCanvas(e.clientX - rect.left, e.clientY - rect.top, this.vp);
         if (IMAGE_EXTS.includes(ext)) {
-          const h = await this.measureImageH(this.app.vault.getResourcePath(vf));
+          const newPath = await sortAssetFile(this.app, vf);
+          const newFile = this.app.vault.getAbstractFileByPath(newPath) as TFile;
+          const h = await this.measureImageH(this.app.vault.getResourcePath(newFile));
           const card: ImageCard = {
             id: crypto.randomUUID(), kind: 'image',
             x: snap(cp.x - IMAGE_DEFAULT_W / 2), y: snap(cp.y - h / 2),
             w: IMAGE_DEFAULT_W, h, z: this.nextZ(),
-            source: { type: 'vault', path: vf.path },
+            source: { type: 'vault', path: newPath }, captionHidden: true,
           };
           this.pushUndo(); this.board.cards.push(card); await this.saveNow();
           this.createCardEl(card); this.selection.select(card.id); this.refreshSelectionVisuals();
         } else if (AUDIO_EXTS.includes(ext)) {
+          const newPath = await sortAssetFile(this.app, vf);
           const card: AudioCard = {
             id: crypto.randomUUID(), kind: 'audio',
             x: snap(cp.x - AUDIO_DEFAULT_W / 2), y: snap(cp.y - AUDIO_DEFAULT_H / 2),
             w: AUDIO_DEFAULT_W, h: AUDIO_DEFAULT_H, z: this.nextZ(),
-            source: { type: 'vault', path: vf.path },
+            source: { type: 'vault', path: newPath },
           };
           this.pushUndo(); this.board.cards.push(card); await this.saveNow();
           this.createCardEl(card); this.selection.select(card.id); this.refreshSelectionVisuals();
@@ -576,16 +596,22 @@ export class FreeformRenderer extends Component {
   private startPan(e: PointerEvent): void {
     this.isPanning = true; this.outer.style.cursor = 'grabbing';
     const sx = e.clientX, sy = e.clientY, svx = this.vp.x, svy = this.vp.y;
-    this.outer.setPointerCapture(e.pointerId);
-    const onMove = (e: PointerEvent) => {
-      this.vp = { ...this.vp, x: svx + (e.clientX - sx), y: svy + (e.clientY - sy) };
+    const pid = e.pointerId;
+    // Use window capture-phase listeners so autoscroll or child stopPropagation
+    // can't block move/up events (e.g. middle-click over <img> or scrollable kanban).
+    const onMove = (me: PointerEvent) => {
+      if (me.pointerId !== pid) return;
+      this.vp = { ...this.vp, x: svx + (me.clientX - sx), y: svy + (me.clientY - sy) };
       this.applyViewport();
     };
-    const onUp = () => {
-      this.outer.removeEventListener('pointermove', onMove); this.outer.removeEventListener('pointerup', onUp);
+    const onUp = (ue: PointerEvent) => {
+      if (ue.pointerId !== pid) return;
+      window.removeEventListener('pointermove', onMove, true);
+      window.removeEventListener('pointerup', onUp, true);
       this.isPanning = false; this.outer.style.cursor = this.spaceDown ? 'grab' : ''; this.scheduleSave();
     };
-    this.outer.addEventListener('pointermove', onMove); this.outer.addEventListener('pointerup', onUp);
+    window.addEventListener('pointermove', onMove, true);
+    window.addEventListener('pointerup', onUp, true);
   }
 
   // ── Marquee ────────────────────────────────────────────────────
@@ -634,7 +660,8 @@ export class FreeformRenderer extends Component {
     el.style.left   = `${card.x ?? 0}px`;
     el.style.top    = `${card.y ?? 0}px`;
     el.style.width  = `${card.w ?? TILE_DEFAULT_W}px`;
-    el.style.height = `${card.h ?? TILE_DEFAULT_H}px`;
+    // Sticky notes auto-size to content — only use saved height for other card types
+    el.style.height = card.kind === 'sticky' ? '' : `${card.h ?? TILE_DEFAULT_H}px`;
     el.style.zIndex = String(card.z ?? 0);
   }
 
@@ -700,7 +727,7 @@ export class FreeformRenderer extends Component {
 
     el.createDiv({ cls: 'icon-board-tile-label', text: tile.label });
     if (tile.subtitle) el.createDiv({ cls: 'icon-board-tile-subtitle', text: tile.subtitle });
-    el.createDiv('icon-board-card-resize-handle');
+    this.appendResizeHandles(el);
   }
 
   // ── Sticky ─────────────────────────────────────────────────────
@@ -708,25 +735,29 @@ export class FreeformRenderer extends Component {
   private renderStickyContent(el: HTMLElement, card: StickyCard): void {
     el.addClass('icon-board-freeform-sticky-card');
     el.style.backgroundColor = card.color;
-    const textEl = el.createDiv('icon-board-sticky-text');
+    if (card.topColor) {
+      const strip = el.createDiv('ib-card-top-strip');
+      strip.style.backgroundColor = card.topColor;
+    }
+    const inner = el.createDiv('icon-board-sticky-inner');
+    const textEl = inner.createDiv('icon-board-sticky-text');
     if (card.textScale) textEl.addClass(`text-scale-${card.textScale}`);
     if (card.textColor) textEl.style.color = card.textColor;
     if (card.textAlign) textEl.style.textAlign = card.textAlign;
     MarkdownRenderer.render(this.app, card.text || '*Double-click to edit…*', textEl, '', this);
-    el.createDiv('icon-board-card-resize-handle');
+    this.appendResizeHandles(el);
   }
 
   private editStickyInline(el: HTMLElement, card: StickyCard): void {
     const textEl = el.querySelector('.icon-board-sticky-text') as HTMLElement | null;
     if (!textEl || el.querySelector('.icon-board-sticky-editor')) return;
+    const inner = el.querySelector<HTMLElement>('.icon-board-sticky-inner') ?? el;
 
-    const editor = el.createDiv('icon-board-sticky-editor') as HTMLElement;
+    const editor = inner.createDiv('icon-board-sticky-editor') as HTMLElement;
     editor.contentEditable = 'true';
-    // Seed with rendered HTML so coloured/bold text appears as-is while editing
     editor.innerHTML = card.text ? textEl.innerHTML : '';
     textEl.style.display = 'none';
 
-    // Place cursor at end
     editor.focus();
     const r = document.createRange();
     r.selectNodeContents(editor);
@@ -735,14 +766,89 @@ export class FreeformRenderer extends Component {
     s?.removeAllRanges();
     s?.addRange(r);
 
-    // Stop pointer events from bubbling to the card drag handler
     editor.addEventListener('pointerdown', e => e.stopPropagation());
 
-    const fmtToolbar = new TextFormatToolbar(editor, el, this.container);
+    // ── Inline tag toggle ─────────────────────────────────────────
+    let savedRange: Range | null = null;
+
+    const applyTag = (tag: string) => {
+      // Keep editor focused throughout — sel.removeAllRanges() can move focus to body
+      editor.focus();
+      const sel = window.getSelection();
+      if (savedRange) { sel?.removeAllRanges(); sel?.addRange(savedRange.cloneRange()); }
+      if (!sel || !sel.rangeCount) return;
+      const range = sel.getRangeAt(0);
+      if (range.collapsed || !editor.contains(range.commonAncestorContainer)) return;
+
+      const ancestor = range.commonAncestorContainer;
+      const existing = (ancestor.nodeType === Node.ELEMENT_NODE
+        ? ancestor as Element : ancestor.parentElement)?.closest(tag);
+      if (existing && editor.contains(existing)) {
+        // Unwrap — move children out, then re-select them
+        const children = Array.from(existing.childNodes);
+        const p = existing.parentNode!;
+        while (existing.firstChild) p.insertBefore(existing.firstChild, existing);
+        existing.remove();
+        if (children.length > 0 && p.contains(children[0]) && p.contains(children[children.length - 1])) {
+          const nr = document.createRange();
+          nr.setStartBefore(children[0]);
+          nr.setEndAfter(children[children.length - 1]);
+          sel.removeAllRanges(); sel.addRange(nr);
+          savedRange = nr.cloneRange();
+        } else {
+          sel.removeAllRanges(); savedRange = null;
+        }
+      } else {
+        // Wrap — re-select the new wrapper's contents
+        const wrapper = document.createElement(tag);
+        const extracted = range.extractContents();
+        const tmp = document.createElement('div');
+        tmp.appendChild(extracted);
+        tmp.querySelectorAll(tag).forEach(n => n.replaceWith(...Array.from(n.childNodes)));
+        while (tmp.firstChild) wrapper.appendChild(tmp.firstChild);
+        range.insertNode(wrapper);
+        wrapper.parentElement?.normalize();
+        const nr = document.createRange();
+        nr.selectNodeContents(wrapper);
+        sel.removeAllRanges(); sel.addRange(nr);
+        savedRange = nr.cloneRange();
+      }
+      // Re-focus after selection manipulation in case browser moved focus away
+      editor.focus();
+    };
+
+    this.activeStickyApplyTag = applyTag;
+
+    // Track selection so context-bar buttons can restore it after stealing focus
+    const onSelChange = () => {
+      const sel = window.getSelection();
+      if (!sel || sel.isCollapsed || !editor.contains(sel.anchorNode)) { savedRange = null; return; }
+      savedRange = sel.getRangeAt(0).cloneRange();
+    };
+    document.addEventListener('selectionchange', onSelChange);
+
+    // Register on window (not document) so we fire before Obsidian's document-level
+    // capture handlers, which intercept CMD+B/I/U before we ever see them.
+    const onFormatKey = (e: KeyboardEvent) => {
+      if (document.activeElement !== editor) return;
+      const meta = e.ctrlKey || e.metaKey;
+      if (!meta) return;
+      if (!e.shiftKey && e.key.toLowerCase() === 'b') { e.preventDefault(); e.stopPropagation(); e.stopImmediatePropagation(); applyTag('strong'); return; }
+      if (!e.shiftKey && e.key.toLowerCase() === 'i') { e.preventDefault(); e.stopPropagation(); e.stopImmediatePropagation(); applyTag('em'); return; }
+      if (!e.shiftKey && e.key.toLowerCase() === 'u') { e.preventDefault(); e.stopPropagation(); e.stopImmediatePropagation(); applyTag('u'); return; }
+      if (e.shiftKey  && e.key.toLowerCase() === 's') { e.preventDefault(); e.stopPropagation(); e.stopImmediatePropagation(); applyTag('s'); return; }
+    };
+    window.addEventListener('keydown', onFormatKey, true);
+
+    const cleanup = () => {
+      document.removeEventListener('selectionchange', onSelChange);
+      window.removeEventListener('keydown', onFormatKey, true);
+      this.activeStickyApplyTag = null;
+    };
 
     const commit = () => {
       if (!el.contains(editor)) return;
-      fmtToolbar.destroy();
+      cleanup();
       this.pushUndo();
       card.text = editor.innerHTML;
       editor.remove(); textEl.style.display = '';
@@ -753,7 +859,7 @@ export class FreeformRenderer extends Component {
     editor.addEventListener('blur', commit);
     editor.addEventListener('keydown', (e) => {
       if (e.key === 'Escape') {
-        e.preventDefault(); fmtToolbar.destroy();
+        e.preventDefault(); cleanup();
         editor.removeEventListener('blur', commit);
         editor.remove(); textEl.style.display = '';
       }
@@ -764,27 +870,29 @@ export class FreeformRenderer extends Component {
 
   private renderChecklistContent(el: HTMLElement, card: ChecklistCard): void {
     el.addClass('icon-board-freeform-checklist-card');
-    // Lazy migration: v2 cards have no accentColor
-    if (!card.accentColor) card.accentColor = '#EF4444';
     el.style.backgroundColor = card.color;
 
-    // Accent bar
-    const accentBar = el.createDiv('icon-board-checklist-accent');
-    accentBar.style.backgroundColor = card.accentColor;
+    // Top strip (optional — only shown if accentColor is set)
+    if (card.accentColor) {
+      const accentBar = el.createDiv('icon-board-checklist-accent');
+      accentBar.style.backgroundColor = card.accentColor;
+    }
 
-    // Title
-    const titleEl = el.createEl('input', { cls: 'icon-board-checklist-title' }) as HTMLInputElement;
-    titleEl.type = 'text'; titleEl.value = card.title || ''; titleEl.placeholder = 'Checklist';
-    titleEl.addEventListener('pointerdown', e => e.stopPropagation());
-    titleEl.addEventListener('input', () => { card.title = titleEl.value; });
-    titleEl.addEventListener('blur', () => this.scheduleSave());
+    // Title (hidden when titleHidden is true)
+    if (!card.titleHidden) {
+      const titleEl = el.createEl('input', { cls: 'icon-board-checklist-title' }) as HTMLInputElement;
+      titleEl.type = 'text'; titleEl.value = card.title || ''; titleEl.placeholder = 'Checklist';
+      titleEl.addEventListener('pointerdown', e => e.stopPropagation());
+      titleEl.addEventListener('input', () => { card.title = titleEl.value; });
+      titleEl.addEventListener('blur', () => this.scheduleSave());
+    }
 
     // List
     const listEl = el.createDiv('icon-board-checklist-list');
     for (const item of card.items) this.appendChecklistItem(listEl, card, item);
     this.appendChecklistGhost(listEl, card);
 
-    el.createDiv('icon-board-card-resize-handle');
+    this.appendResizeHandles(el);
   }
 
   private appendChecklistItem(listEl: HTMLElement, card: ChecklistCard, item: ChecklistItem): HTMLElement {
@@ -995,7 +1103,7 @@ export class FreeformRenderer extends Component {
       }));
     }
 
-    el.createDiv('icon-board-card-resize-handle');
+    this.appendResizeHandles(el);
   }
 
   // ── Image ──────────────────────────────────────────────────────
@@ -1097,7 +1205,7 @@ export class FreeformRenderer extends Component {
       }
     });
 
-    el.createDiv('icon-board-card-resize-handle');
+    this.appendResizeHandles(el);
   }
 
   // ── Audio ──────────────────────────────────────────────────────
@@ -1120,7 +1228,7 @@ export class FreeformRenderer extends Component {
     } else {
       el.createDiv({ cls: 'icon-board-audio-missing', text: 'File not found' });
     }
-    el.createDiv('icon-board-card-resize-handle');
+    this.appendResizeHandles(el);
   }
 
   // ── Bookmark ───────────────────────────────────────────────────
@@ -1163,33 +1271,54 @@ export class FreeformRenderer extends Component {
       try { footer.createDiv({ cls: 'icon-board-bookmark-domain', text: new URL(card.url).hostname }); } catch {}
     }
 
-    el.createDiv('icon-board-card-resize-handle');
+    this.appendResizeHandles(el);
   }
 
   // ── Kanban column ──────────────────────────────────────────────
 
   private renderKanbanColumnContent(el: HTMLElement, card: KanbanColumnCard): void {
     el.addClass('icon-board-freeform-kanban-card');
+    if (card.bgColor) el.style.backgroundColor = card.bgColor;
+    if (card.topColor) {
+      const strip = el.createDiv('ib-card-top-strip');
+      strip.style.backgroundColor = card.topColor;
+    }
 
     const header = el.createDiv('icon-board-kanban-header');
 
-    const titleEl = header.createDiv('icon-board-kanban-title');
-    if (card.title) {
-      titleEl.setText(card.title);
-      titleEl.style.color = card.color;
-    } else {
-      titleEl.addClass('icon-board-kanban-title-empty');
-      titleEl.setText('Untitled');
+    let titleEl: HTMLElement | null = null;
+    if (!card.titleHidden) {
+      titleEl = header.createDiv('icon-board-kanban-title');
+      if (card.color) titleEl.style.color = card.color;
+      if (card.title) {
+        titleEl.setText(card.title);
+      } else {
+        titleEl.addClass('icon-board-kanban-title-empty');
+        titleEl.setText('Untitled');
+      }
+      titleEl.addEventListener('dblclick', (e) => {
+        e.stopPropagation();
+        if (titleEl) this.editKanbanTitle(card, el, titleEl);
+      });
     }
 
     const countRow = header.createDiv('icon-board-kanban-count-row');
     countRow.createSpan({ cls: 'icon-board-kanban-col-count' });
     this.updateKanbanCount(card, el);
 
-    titleEl.addEventListener('dblclick', (e) => {
+    // Collapse toggle button
+    const collapseBtn = header.createDiv('icon-board-kanban-collapse-btn');
+    setIcon(collapseBtn, 'chevron-down');
+    collapseBtn.addEventListener('click', (e) => {
       e.stopPropagation();
-      this.editKanbanTitle(card, el, titleEl);
+      this.pushUndo();
+      card.collapsed = !card.collapsed;
+      el.toggleClass('is-collapsed', !!card.collapsed);
+      this.scheduleSave();
     });
+
+    // Apply collapsed state
+    if (card.collapsed) el.addClass('is-collapsed');
 
     const itemsEl = el.createDiv('icon-board-kanban-items');
     for (const item of card.items) {
@@ -1221,8 +1350,13 @@ export class FreeformRenderer extends Component {
       if (draggable?.type === 'file' && draggable.file) {
         const vf = draggable.file as TFile;
         const ext = vf.extension.toLowerCase();
-        if (IMAGE_EXTS.includes(ext)) this.addKanbanImageItem(vf.path, card, itemsEl);
-        else if (AUDIO_EXTS.includes(ext)) this.addKanbanAudioItem(vf.path, card, itemsEl);
+        if (IMAGE_EXTS.includes(ext)) {
+          const newPath = await sortAssetFile(this.app, vf);
+          this.addKanbanImageItem(newPath, card, itemsEl);
+        } else if (AUDIO_EXTS.includes(ext)) {
+          const newPath = await sortAssetFile(this.app, vf);
+          this.addKanbanAudioItem(newPath, card, itemsEl);
+        }
       }
     });
 
@@ -1235,7 +1369,7 @@ export class FreeformRenderer extends Component {
       this.addKanbanItem(card, el);
     });
 
-    el.createDiv('icon-board-card-resize-handle');
+    this.appendResizeHandles(el);
   }
 
   private addKanban(): void {
@@ -1255,6 +1389,18 @@ export class FreeformRenderer extends Component {
   }
 
   private rebuildKanbanCard(card: KanbanColumnCard): void {
+    const oldEl = this.cardEls.get(card.id);
+    if (!oldEl) return;
+    const newEl = this.inner.createDiv('icon-board-freeform-card');
+    newEl.dataset.id = card.id;
+    this.positionCardEl(newEl, card);
+    this.renderCardContent(newEl, card);
+    this.bindCardEvents(newEl, card);
+    oldEl.replaceWith(newEl);
+    this.cardEls.set(card.id, newEl);
+  }
+
+  private rebuildChecklistCard(card: ChecklistCard): void {
     const oldEl = this.cardEls.get(card.id);
     if (!oldEl) return;
     const newEl = this.inner.createDiv('icon-board-freeform-card');
@@ -1295,14 +1441,13 @@ export class FreeformRenderer extends Component {
     let cancelled = false;
     const restoreTitle = (text: string | undefined) => {
       titleEl.empty();
+      if (card.color) titleEl.style.color = card.color;
       if (text) {
         titleEl.removeClass('icon-board-kanban-title-empty');
         titleEl.setText(text);
-        titleEl.style.color = card.color;
       } else {
         titleEl.addClass('icon-board-kanban-title-empty');
         titleEl.setText('Untitled');
-        titleEl.style.color = '';
       }
     };
     const commit = () => {
@@ -1407,6 +1552,15 @@ export class FreeformRenderer extends Component {
     itemEl.addEventListener('keydown', (e) => {
       if (e.key === ' ') { e.preventDefault(); e.stopPropagation(); cb.click(); }
       else if (e.key === 'Enter') { e.preventDefault(); e.stopPropagation(); this.editKanbanItemInline(card, item, itemEl); }
+      else if (e.key === 'Delete' || e.key === 'Backspace') {
+        e.preventDefault(); e.stopPropagation();
+        this.pushUndo();
+        card.items = card.items.filter(i => i.id !== item.id);
+        itemEl.remove();
+        const cardEl = this.cardEls.get(card.id);
+        if (cardEl) this.updateKanbanCount(card, cardEl);
+        this.scheduleSave();
+      }
     });
 
     itemEl.addEventListener('pointerdown', (e) => {
@@ -1430,10 +1584,17 @@ export class FreeformRenderer extends Component {
       const onUp = () => {
         document.removeEventListener('pointermove', onMove);
         document.removeEventListener('pointerup', onUp);
-        if (!wasDragged) this.editKanbanItemInline(card, item, itemEl);
+        if (!wasDragged) itemEl.focus();
       };
       document.addEventListener('pointermove', onMove);
       document.addEventListener('pointerup', onUp);
+    });
+
+    itemEl.addEventListener('dblclick', (e) => {
+      const target = e.target as HTMLElement;
+      if (target.closest('.icon-board-kanban-item-cb') || target.closest('.icon-board-kanban-item-del')) return;
+      e.stopPropagation();
+      if (!item.imagePath && !item.audioPath) this.editKanbanItemInline(card, item, itemEl);
     });
 
     itemEl.addEventListener('contextmenu', (e) => {
@@ -1760,6 +1921,15 @@ export class FreeformRenderer extends Component {
   private refreshSelectionVisuals(): void {
     for (const [id, el] of this.cardEls) el.toggleClass('is-selected', this.selection.has(id));
     this.alignBarEl?.toggleClass('is-visible', this.selection.getIds().length > 1);
+
+    const ids = this.selection.getIds();
+    if (ids.length === 1) {
+      const card = this.board.cards.find(c => c.id === ids[0]);
+      if (card) this.contextBar?.show(card as SupportedCard);
+      else this.contextBar?.hide();
+    } else {
+      this.contextBar?.hide();
+    }
   }
 
   // ── Card events ────────────────────────────────────────────────
@@ -2145,56 +2315,81 @@ export class FreeformRenderer extends Component {
 
   // ── Resize handle ──────────────────────────────────────────────
 
+  private appendResizeHandles(el: HTMLElement): void {
+    for (const corner of ['nw', 'ne', 'sw', 'se'] as const)
+      el.createDiv(`icon-board-card-resize-handle icon-board-card-resize-handle--${corner}`);
+  }
+
   private bindResizeHandle(el: HTMLElement, card: SupportedCard): void {
-    const handle = el.querySelector('.icon-board-card-resize-handle') as HTMLElement | null;
-    if (!handle) return;
+    const handles = el.querySelectorAll<HTMLElement>('.icon-board-card-resize-handle');
+    handles.forEach(handle => {
+      const corner = (['nw','ne','sw','se'] as const).find(c => handle.classList.contains(`icon-board-card-resize-handle--${c}`)) ?? 'se';
 
-    handle.addEventListener('pointerdown', (e) => {
-      e.stopPropagation(); e.preventDefault(); this.pushUndo();
-      const sc = { x: e.clientX, y: e.clientY };
-      const startW = card.w ?? TILE_DEFAULT_W, startH = card.h ?? TILE_DEFAULT_H;
-      const { w: minW, h: minH } = cardMinSize(card.kind);
-      el.setPointerCapture(e.pointerId);
+      handle.addEventListener('pointerdown', (e) => {
+        e.stopPropagation(); e.preventDefault(); this.pushUndo();
+        const sc = { x: e.clientX, y: e.clientY };
+        const startX = card.x ?? 0, startY = card.y ?? 0;
+        const startW = card.w ?? TILE_DEFAULT_W, startH = card.h ?? TILE_DEFAULT_H;
+        const { w: minW, h: minH } = cardMinSize(card.kind);
+        el.setPointerCapture(e.pointerId);
 
-      // Compute aspect ratio for image cards from natural image dimensions or current size
-      let imgAspect: number | null = null;
-      if (card.kind === 'image') {
-        const imgEl = el.querySelector('.icon-board-image-img') as HTMLImageElement | null;
-        if (imgEl && imgEl.naturalWidth > 0 && imgEl.naturalHeight > 0) {
-          imgAspect = imgEl.naturalHeight / imgEl.naturalWidth;
-        } else {
-          imgAspect = startH / startW;
+        let imgAspect: number | null = null;
+        if (card.kind === 'image') {
+          const imgEl = el.querySelector('.icon-board-image-img') as HTMLImageElement | null;
+          imgAspect = (imgEl && imgEl.naturalWidth > 0 && imgEl.naturalHeight > 0)
+            ? imgEl.naturalHeight / imgEl.naturalWidth
+            : startH / startW;
         }
-      }
 
-      const onMove = (e: PointerEvent) => {
-        card.w = Math.max(minW, snap(startW + (e.clientX - sc.x) / this.vp.zoom));
-        if (imgAspect !== null) {
-          card.h = Math.max(minH, snap(card.w * imgAspect));
-        } else {
-          card.h = Math.max(minH, snap(startH + (e.clientY - sc.y) / this.vp.zoom));
-        }
-        el.style.width = `${card.w}px`; el.style.height = `${card.h}px`;
-        if (card.kind === 'tile') {
-          const tileSize = Math.max(40, Math.min(card.w - 20, card.h - 50 - 16));
-          const sq = el.querySelector('.icon-board-freeform-tile-square') as HTMLElement | null;
-          const ic = el.querySelector('.icon-board-tile-icon') as HTMLElement | null;
-          if (sq) { sq.style.width = `${tileSize}px`; sq.style.height = `${tileSize}px`; sq.style.borderRadius = `${Math.round(tileSize * 0.2)}px`; }
-          if (ic) {
-            const is = Math.round(tileSize * 0.55);
-            ic.style.width = `${is}px`; ic.style.height = `${is}px`;
-            if (ic.classList.contains('icon-board-tile-emoji')) ic.style.fontSize = `${Math.round(is * 0.9)}px`;
+        const onMove = (ev: PointerEvent) => {
+          const cdx = (ev.clientX - sc.x) / this.vp.zoom;
+          const cdy = (ev.clientY - sc.y) / this.vp.zoom;
+          const wSign = (corner === 'se' || corner === 'ne') ? 1 : -1;
+          const hSign = (corner === 'se' || corner === 'sw') ? 1 : -1;
+          const newW = Math.max(minW, snap(startW + wSign * cdx));
+
+          if (card.kind === 'sticky') {
+            card.w = newW;
+            if (corner === 'sw' || corner === 'nw') card.x = snap(startX + startW - newW);
+            el.style.width = `${card.w}px`;
+            el.style.left = `${card.x ?? startX}px`;
+          } else if (imgAspect !== null) {
+            card.w = newW;
+            card.h = Math.max(minH, snap(newW * imgAspect));
+            if (corner === 'sw' || corner === 'nw') card.x = snap(startX + startW - card.w);
+            if (corner === 'nw' || corner === 'ne') card.y = snap(startY + startH - card.h);
+            el.style.width = `${card.w}px`; el.style.height = `${card.h}px`;
+            el.style.left = `${card.x ?? startX}px`; el.style.top = `${card.y ?? startY}px`;
+          } else {
+            card.w = newW;
+            card.h = Math.max(minH, snap(startH + hSign * cdy));
+            if (corner === 'sw' || corner === 'nw') card.x = snap(startX + startW - card.w);
+            if (corner === 'nw' || corner === 'ne') card.y = snap(startY + startH - card.h);
+            el.style.width = `${card.w}px`; el.style.height = `${card.h}px`;
+            el.style.left = `${card.x ?? startX}px`; el.style.top = `${card.y ?? startY}px`;
           }
-        }
-        this.updateConnectionsForCard(card.id);
-      };
-      const onUp = () => {
-        el.removeEventListener('pointermove', onMove); el.removeEventListener('pointerup', onUp);
-        this.renderCardContent(el, card); this.bindResizeHandle(el, card);
-        this.updateConnectionsForCard(card.id);
-        this.scheduleSave();
-      };
-      el.addEventListener('pointermove', onMove); el.addEventListener('pointerup', onUp);
+
+          if (card.kind === 'tile') {
+            const tileSize = Math.max(40, Math.min(card.w - 20, card.h - 50 - 16));
+            const sq = el.querySelector('.icon-board-freeform-tile-square') as HTMLElement | null;
+            const ic = el.querySelector('.icon-board-tile-icon') as HTMLElement | null;
+            if (sq) { sq.style.width = `${tileSize}px`; sq.style.height = `${tileSize}px`; sq.style.borderRadius = `${Math.round(tileSize * 0.2)}px`; }
+            if (ic) {
+              const is = Math.round(tileSize * 0.55);
+              ic.style.width = `${is}px`; ic.style.height = `${is}px`;
+              if (ic.classList.contains('icon-board-tile-emoji')) ic.style.fontSize = `${Math.round(is * 0.9)}px`;
+            }
+          }
+          this.updateConnectionsForCard(card.id);
+        };
+        const onUp = () => {
+          el.removeEventListener('pointermove', onMove); el.removeEventListener('pointerup', onUp);
+          this.renderCardContent(el, card); this.bindResizeHandle(el, card);
+          this.updateConnectionsForCard(card.id);
+          this.scheduleSave();
+        };
+        el.addEventListener('pointermove', onMove); el.addEventListener('pointerup', onUp);
+      });
     });
   }
 
@@ -2312,7 +2507,7 @@ export class FreeformRenderer extends Component {
 
   private addSticky(): void { const p = this.centerPos(STICKY_DEFAULT_W, STICKY_DEFAULT_H); this.addStickyAt(p.x, p.y); }
   private addStickyAt(x: number, y: number, initialText = ''): void {
-    const card: StickyCard = { id: crypto.randomUUID(), kind: 'sticky', x, y, w: STICKY_DEFAULT_W, h: STICKY_DEFAULT_H, z: this.nextZ(), text: initialText, color: this.defaultStickyColor ?? STICKY_COLORS[0].color };
+    const card: StickyCard = { id: crypto.randomUUID(), kind: 'sticky', x, y, w: STICKY_DEFAULT_W, z: this.nextZ(), text: initialText, color: this.defaultStickyColor ?? STICKY_COLORS[0].color };
     this.pushUndo(); this.board.cards.push(card); this.saveNow();
     const el = this.createCardEl(card);
     this.selection.select(card.id); this.refreshSelectionVisuals();
@@ -2340,25 +2535,27 @@ export class FreeformRenderer extends Component {
   private addImage(): void { const p = this.centerPos(IMAGE_DEFAULT_W, IMAGE_DEFAULT_H); this.addImageAt(p.x, p.y); }
   private addImageAt(x: number, y: number): void {
     const createCard = (path: string, h: number) => {
-      const card: ImageCard = { id: crypto.randomUUID(), kind: 'image', x, y, w: IMAGE_DEFAULT_W, h, z: this.nextZ(), source: { type: 'vault', path } };
+      const card: ImageCard = { id: crypto.randomUUID(), kind: 'image', x, y, w: IMAGE_DEFAULT_W, h, z: this.nextZ(), source: { type: 'vault', path }, captionHidden: true };
       this.pushUndo(); this.board.cards.push(card); this.saveNow();
       this.createCardEl(card); this.selection.select(card.id); this.refreshSelectionVisuals();
     };
     const fromVault = () => new VaultImagePickerModal(this.app, async (f) => {
-      const h = await this.measureImageH(this.app.vault.getResourcePath(f));
-      createCard(f.path, h);
+      const newPath = await sortAssetFile(this.app, f);
+      const newFile = this.app.vault.getAbstractFileByPath(newPath) as TFile;
+      const h = await this.measureImageH(this.app.vault.getResourcePath(newFile));
+      createCard(newPath, h);
     }).open();
     const fromUpload = () => {
       const input = document.createElement('input');
       input.type = 'file'; input.accept = IMAGE_EXTS.map(e => `.${e}`).join(',');
       input.addEventListener('change', async () => {
         const file = input.files?.[0]; if (!file) return;
-        const [h] = await Promise.all([this.measureImageH(file), this.ensureFolder(this.attachmentFolder)]);
         const ext = file.type.includes('png') ? 'png' : file.type.includes('gif') ? 'gif' : file.type.includes('webp') ? 'webp' : 'jpg';
-        const base = file.name.replace(/\.[^.]+$/, '').replace(/\s+/g, '-');
-        const path = `${this.attachmentFolder}/${base}-${Date.now()}.${ext}`;
-        try { await this.app.vault.createBinary(path, await file.arrayBuffer()); }
+        const base = file.name.replace(/\.[^.]+$/, '');
+        let path: string;
+        try { path = await saveNewAsset(this.app, await file.arrayBuffer(), `${base}.${ext}`); }
         catch { new Notice(`Failed to save ${file.name}.`); return; }
+        const h = await this.measureImageH(file);
         createCard(path, h);
       });
       input.click();
@@ -2373,17 +2570,19 @@ export class FreeformRenderer extends Component {
       this.pushUndo(); this.board.cards.push(card); this.saveNow();
       this.createCardEl(card); this.selection.select(card.id); this.refreshSelectionVisuals();
     };
-    const fromVault = () => new VaultAudioPickerModal(this.app, (f) => createCard(f.path)).open();
+    const fromVault = () => new VaultAudioPickerModal(this.app, async (f) => {
+      const newPath = await sortAssetFile(this.app, f);
+      createCard(newPath);
+    }).open();
     const fromUpload = () => {
       const input = document.createElement('input');
       input.type = 'file'; input.accept = AUDIO_EXTS.map(e => `.${e}`).join(',');
       input.addEventListener('change', async () => {
         const file = input.files?.[0]; if (!file) return;
-        await this.ensureFolder(this.attachmentFolder);
-        const ext = file.name.toLowerCase().endsWith('.mp3') ? 'mp3' : 'wav';
-        const base = file.name.replace(/\.[^.]+$/, '').replace(/\s+/g, '-');
-        const path = `${this.attachmentFolder}/${base}-${Date.now()}.${ext}`;
-        try { await this.app.vault.createBinary(path, await file.arrayBuffer()); }
+        const ext = file.name.toLowerCase().endsWith('.mp3') ? 'mp3' : file.name.toLowerCase().endsWith('.ogg') ? 'ogg' : 'wav';
+        const base = file.name.replace(/\.[^.]+$/, '');
+        let path: string;
+        try { path = await saveNewAsset(this.app, await file.arrayBuffer(), `${base}.${ext}`); }
         catch { new Notice(`Failed to save ${file.name}.`); return; }
         createCard(path);
       });
@@ -2435,40 +2634,37 @@ export class FreeformRenderer extends Component {
   }
 
   private async handlePastedImage(file: File): Promise<void> {
-    const [h] = await Promise.all([this.measureImageH(file), this.ensureFolder(this.attachmentFolder)]);
     const ext = file.type.includes('png') ? 'png' : file.type.includes('gif') ? 'gif' : 'jpg';
     const ts = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
-    const path = `${this.attachmentFolder}/Pasted Image ${ts}.${ext}`;
-    try {
-      await this.app.vault.createBinary(path, await file.arrayBuffer());
-    } catch { new Notice('Failed to save pasted image.'); return; }
+    const filename = `Pasted Image ${ts}.${ext}`;
+    let path: string;
+    try { path = await saveNewAsset(this.app, await file.arrayBuffer(), filename); }
+    catch { new Notice('Failed to save pasted image.'); return; }
+    const h = await this.measureImageH(this.app.vault.getResourcePath(this.app.vault.getAbstractFileByPath(path) as TFile));
     const { x, y } = this.centerPos(IMAGE_DEFAULT_W, h);
-    const card: ImageCard = { id: crypto.randomUUID(), kind: 'image', x, y, w: IMAGE_DEFAULT_W, h, z: this.nextZ(), source: { type: 'vault', path } };
+    const card: ImageCard = { id: crypto.randomUUID(), kind: 'image', x, y, w: IMAGE_DEFAULT_W, h, z: this.nextZ(), source: { type: 'vault', path }, captionHidden: true };
     this.pushUndo(); this.board.cards.push(card); await this.saveNow();
     this.createCardEl(card); this.selection.select(card.id); this.refreshSelectionVisuals();
   }
 
   private async handleDroppedImage(file: File, x: number, y: number): Promise<void> {
-    const [h] = await Promise.all([this.measureImageH(file), this.ensureFolder(this.attachmentFolder)]);
-    const ext = file.type.includes('png') ? 'png' : file.type.includes('gif') ? 'gif' : 'jpg';
-    const base = file.name.replace(/\.[^.]+$/, '').replace(/\s+/g, '-');
-    const path = `${this.attachmentFolder}/${base}-${Date.now()}.${ext}`;
-    try {
-      await this.app.vault.createBinary(path, await file.arrayBuffer());
-    } catch { new Notice(`Failed to save ${file.name}.`); return; }
-    const card: ImageCard = { id: crypto.randomUUID(), kind: 'image', x, y, w: IMAGE_DEFAULT_W, h, z: this.nextZ(), source: { type: 'vault', path } };
+    const ext = file.type.includes('png') ? 'png' : file.type.includes('gif') ? 'gif' : file.type.includes('webp') ? 'webp' : 'jpg';
+    const base = file.name.replace(/\.[^.]+$/, '');
+    let path: string;
+    try { path = await saveNewAsset(this.app, await file.arrayBuffer(), `${base}.${ext}`); }
+    catch { new Notice(`Failed to save ${file.name}.`); return; }
+    const h = await this.measureImageH(file);
+    const card: ImageCard = { id: crypto.randomUUID(), kind: 'image', x, y, w: IMAGE_DEFAULT_W, h, z: this.nextZ(), source: { type: 'vault', path }, captionHidden: true };
     this.pushUndo(); this.board.cards.push(card); await this.saveNow();
     this.createCardEl(card); this.selection.select(card.id); this.refreshSelectionVisuals();
   }
 
   private async handleDroppedImageToKanban(file: File, card: KanbanColumnCard, itemsEl: HTMLElement): Promise<void> {
-    await this.ensureFolder(this.attachmentFolder);
-    const ext = file.type.includes('png') ? 'png' : file.type.includes('gif') ? 'gif' : 'jpg';
-    const base = file.name.replace(/\.[^.]+$/, '').replace(/\s+/g, '-');
-    const path = `${this.attachmentFolder}/${base}-${Date.now()}.${ext}`;
-    try {
-      await this.app.vault.createBinary(path, await file.arrayBuffer());
-    } catch { new Notice(`Failed to save ${file.name}.`); return; }
+    const ext = file.type.includes('png') ? 'png' : file.type.includes('gif') ? 'gif' : file.type.includes('webp') ? 'webp' : 'jpg';
+    const base = file.name.replace(/\.[^.]+$/, '');
+    let path: string;
+    try { path = await saveNewAsset(this.app, await file.arrayBuffer(), `${base}.${ext}`); }
+    catch { new Notice(`Failed to save ${file.name}.`); return; }
     this.addKanbanImageItem(path, card, itemsEl);
   }
 
@@ -2483,13 +2679,11 @@ export class FreeformRenderer extends Component {
   }
 
   private async handleDroppedAudioToKanban(file: File, card: KanbanColumnCard, itemsEl: HTMLElement): Promise<void> {
-    await this.ensureFolder(this.attachmentFolder);
-    const ext = file.name.endsWith('.mp3') ? 'mp3' : 'wav';
-    const base = file.name.replace(/\.[^.]+$/, '').replace(/\s+/g, '-');
-    const path = `${this.attachmentFolder}/${base}-${Date.now()}.${ext}`;
-    try {
-      await this.app.vault.createBinary(path, await file.arrayBuffer());
-    } catch { new Notice(`Failed to save ${file.name}.`); return; }
+    const ext = file.name.toLowerCase().endsWith('.mp3') ? 'mp3' : file.name.toLowerCase().endsWith('.ogg') ? 'ogg' : 'wav';
+    const base = file.name.replace(/\.[^.]+$/, '');
+    let path: string;
+    try { path = await saveNewAsset(this.app, await file.arrayBuffer(), `${base}.${ext}`); }
+    catch { new Notice(`Failed to save ${file.name}.`); return; }
     this.addKanbanAudioItem(path, card, itemsEl);
   }
 
@@ -2512,13 +2706,11 @@ export class FreeformRenderer extends Component {
   }
 
   private async handleDroppedAudio(file: File, x: number, y: number): Promise<void> {
-    await this.ensureFolder(this.attachmentFolder);
-    const ext = file.name.endsWith('.mp3') ? 'mp3' : 'wav';
-    const base = file.name.replace(/\.[^.]+$/, '').replace(/\s+/g, '-');
-    const path = `${this.attachmentFolder}/${base}-${Date.now()}.${ext}`;
-    try {
-      await this.app.vault.createBinary(path, await file.arrayBuffer());
-    } catch { new Notice(`Failed to save ${file.name}.`); return; }
+    const ext = file.name.toLowerCase().endsWith('.mp3') ? 'mp3' : file.name.toLowerCase().endsWith('.ogg') ? 'ogg' : 'wav';
+    const base = file.name.replace(/\.[^.]+$/, '');
+    let path: string;
+    try { path = await saveNewAsset(this.app, await file.arrayBuffer(), `${base}.${ext}`); }
+    catch { new Notice(`Failed to save ${file.name}.`); return; }
     const card: AudioCard = { id: crypto.randomUUID(), kind: 'audio', x, y, w: AUDIO_DEFAULT_W, h: AUDIO_DEFAULT_H, z: this.nextZ(), source: { type: 'vault', path } };
     this.pushUndo(); this.board.cards.push(card); await this.saveNow();
     this.createCardEl(card); this.selection.select(card.id); this.refreshSelectionVisuals();
@@ -2716,9 +2908,12 @@ export class FreeformRenderer extends Component {
     const tb = this.toolbarEl = this.container.createDiv('icon-board-freeform-toolbar');
     tb.addClass(`tb-pos-${this.toolbarPosition}`);
 
+    // ── Add panel (slot layer shown when no card is selected) ──
+    const addPanel = tb.createDiv('ib-add-panel');
+
     // ── Primary buttons ──
     const mkBtn = (label: string, icon: string, tool: string, onClick?: () => void): HTMLElement => {
-      const btn = tb.createDiv('icon-board-tb-btn');
+      const btn = addPanel.createDiv('icon-board-tb-btn');
       btn.setAttribute('tabindex', '0'); btn.setAttribute('aria-label', label);
       const iconEl = btn.createDiv('icon-board-tb-btn-icon');
       setIcon(iconEl, icon);
@@ -2726,6 +2921,41 @@ export class FreeformRenderer extends Component {
       const handler = onClick ?? (() => this.activateTool(tool, btn));
       btn.addEventListener('click', handler);
       btn.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handler(); } });
+
+      // ── Drag to place ──
+      if (tool !== 'connect') {
+        btn.addEventListener('pointerdown', (e) => {
+          if (e.button !== 0) return;
+          let dragging = false;
+          let ghost: HTMLElement | null = null;
+          const sx = e.clientX, sy = e.clientY;
+
+          const onMove = (me: PointerEvent) => {
+            if (!dragging && Math.hypot(me.clientX - sx, me.clientY - sy) > 8) {
+              dragging = true;
+              ghost = document.body.createDiv('ib-toolbar-drag-ghost');
+              setIcon(ghost, icon);
+            }
+            if (ghost) { ghost.style.left = `${me.clientX}px`; ghost.style.top = `${me.clientY}px`; }
+          };
+          const onUp = (ue: PointerEvent) => {
+            document.removeEventListener('pointermove', onMove);
+            document.removeEventListener('pointerup', onUp);
+            ghost?.remove(); ghost = null;
+            if (!dragging) return;
+            const r = this.outer.getBoundingClientRect();
+            if (ue.clientX < r.left || ue.clientX > r.right || ue.clientY < r.top || ue.clientY > r.bottom) return;
+            const cp = screenToCanvas(ue.clientX - r.left, ue.clientY - r.top, this.vp);
+            this.clearPendingTool();
+            this.pendingTool = tool;
+            this.pendingToolBtn = null;
+            this.placePendingTool(cp.x, cp.y);
+          };
+          document.addEventListener('pointermove', onMove);
+          document.addEventListener('pointerup', onUp);
+        });
+      }
+
       return btn;
     };
 
@@ -2747,8 +2977,8 @@ export class FreeformRenderer extends Component {
     this.dotsToggleBtn.toggleClass('is-active', !this.board.dotsHidden);
 
     // ── Overflow separator + button ──
-    tb.createDiv('icon-board-tb-overflow-sep');
-    const overflowBtn = tb.createDiv('icon-board-tb-btn icon-board-tb-overflow-btn');
+    addPanel.createDiv('icon-board-tb-overflow-sep');
+    const overflowBtn = addPanel.createDiv('icon-board-tb-btn icon-board-tb-overflow-btn');
     overflowBtn.setAttribute('tabindex', '0'); overflowBtn.setAttribute('aria-label', 'More…');
     overflowBtn.setText('···');
     overflowBtn.addEventListener('click', (e) => { e.stopPropagation(); this.toggleOverflow(overflowBtn); });
@@ -2766,6 +2996,9 @@ export class FreeformRenderer extends Component {
       fab.empty();
       setIcon(fab, tb.hasClass('is-open') ? 'x' : 'plus');
     });
+
+    // ── Context bar (occupies the same slot, shown when a card is selected) ──
+    this.contextBar = new ContextBar(tb, e => this.handleCtxEvent(e));
   }
 
   private toggleOverflow(anchor: HTMLElement): void {
@@ -2782,12 +3015,9 @@ export class FreeformRenderer extends Component {
       btn.addEventListener('click', handler);
       btn.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handler(); } });
     };
-    mkOv('Image',        'image',      'image');
-    mkOv('Audio',        'music',      'audio');
-    mkOv('Note Link',    'file-text',  'notelink');
-    mkOv('Tile — Note',  'file',       'tile-note');
-    mkOv('Tile — Canvas','layout-template', 'tile-canvas');
-    mkOv('Tile — Folder','folder',     'tile-folder');
+    mkOv('Image',     'image',     'image');
+    mkOv('Audio',     'music',     'audio');
+    mkOv('Note Link', 'file-text', 'notelink');
 
     pop.createDiv('icon-board-tb-overflow-sep');
 
@@ -2866,20 +3096,22 @@ export class FreeformRenderer extends Component {
       if (hex === '#FFFFFF') sw.addClass('has-border');
       sw.addEventListener('click', () => {
         this.pushUndo(); card.accentColor = hex;
-        cardEl.querySelector<HTMLElement>('.icon-board-checklist-accent')!.style.backgroundColor = hex;
+        const bar = cardEl.querySelector<HTMLElement>('.icon-board-checklist-accent');
+        if (bar) bar.style.backgroundColor = hex;
         this.scheduleSave(); pop.remove();
       });
     }
 
     const hexRow = pop.createDiv('icon-board-accent-pop-hex-row');
     const hexInput = hexRow.createEl('input', { cls: 'icon-board-accent-pop-hex', type: 'text', placeholder: '#EF4444' });
-    hexInput.value = card.accentColor;
+    hexInput.value = card.accentColor ?? '';
     hexInput.addEventListener('pointerdown', e => e.stopPropagation());
     hexInput.addEventListener('change', () => {
       const val = hexInput.value.trim();
       if (/^#[0-9a-fA-F]{6}$/.test(val)) {
         this.pushUndo(); card.accentColor = val;
-        cardEl.querySelector<HTMLElement>('.icon-board-checklist-accent')!.style.backgroundColor = val;
+        const bar = cardEl.querySelector<HTMLElement>('.icon-board-checklist-accent');
+        if (bar) bar.style.backgroundColor = val;
         this.scheduleSave(); pop.remove();
       }
     });
@@ -2950,15 +3182,23 @@ export class FreeformRenderer extends Component {
 
   private initConnectionLayer(): void {
     const ns = 'http://www.w3.org/2000/svg';
+
+    // Visual layer — behind cards (first child of inner)
     const svg = document.createElementNS(ns, 'svg') as SVGSVGElement;
     svg.classList.add('icon-board-connections-svg');
     svg.style.cssText = 'position:absolute;top:0;left:0;width:1px;height:1px;overflow:visible;pointer-events:none;';
     this.svgDefs = document.createElementNS(ns, 'defs') as SVGDefsElement;
     svg.appendChild(this.svgDefs);
-    // First child of inner so all cards render on top of it
     if (this.inner.firstChild) this.inner.insertBefore(svg, this.inner.firstChild);
     else this.inner.appendChild(svg);
     this.svgEl = svg;
+
+    // Hit layer — above all cards so connection lines are always clickable
+    const hitSvg = document.createElementNS(ns, 'svg') as SVGSVGElement;
+    hitSvg.classList.add('icon-board-connections-hit-svg');
+    hitSvg.style.cssText = 'position:absolute;top:0;left:0;width:1px;height:1px;overflow:visible;pointer-events:none;z-index:9999;';
+    this.inner.appendChild(hitSvg);
+    this.hitSvgEl = hitSvg;
   }
 
   private refreshAllConnections(): void {
@@ -2995,7 +3235,7 @@ export class FreeformRenderer extends Component {
       menu.addItem(i => i.setTitle('Delete connection').setIcon('trash-2').onClick(() => this.deleteSelectedConnection()));
       menu.showAtMouseEvent(e);
     });
-    this.svgEl.appendChild(hit);
+    this.hitSvgEl.appendChild(hit);
     this.connectionHitPaths.set(conn.id, hit);
 
     // Visible path (pointer-events:none so hit area handles all events)
@@ -3299,10 +3539,9 @@ export class FreeformRenderer extends Component {
     this.connectionSelectPath.setAttribute('fill', 'none');
     this.connectionSelectPath.setAttribute('stroke-linecap', 'round');
     this.connectionSelectPath.style.pointerEvents = 'none';
-    const visPath = this.connectionPaths.get(id);
-    if (visPath) this.svgEl.insertBefore(this.connectionSelectPath, visPath);
-    else this.svgEl.appendChild(this.connectionSelectPath);
+    this.hitSvgEl.appendChild(this.connectionSelectPath);
     this.showConnectionProps(conn);
+    this.contextBar?.showConn(conn);
   }
 
   private deselectConnection(): void {
@@ -3310,6 +3549,7 @@ export class FreeformRenderer extends Component {
     this.connectionSelectPath?.remove(); this.connectionSelectPath = null;
     this.selectedConnectionId = null;
     this.hideConnectionProps();
+    this.contextBar?.hide();
   }
 
   private rerenderConnection(conn: Connection): void {
@@ -3326,9 +3566,7 @@ export class FreeformRenderer extends Component {
         this.connectionSelectPath.setAttribute('d', d);
         this.connectionSelectPath.setAttribute('stroke-width', String(conn.thickness + 6));
       }
-      // Move select halo before newly rendered visible path
-      const visPath = this.connectionPaths.get(conn.id);
-      if (visPath) this.svgEl.insertBefore(this.connectionSelectPath, visPath);
+      // Halo stays in hitSvgEl — just update its path data above
     }
   }
 
@@ -3498,6 +3736,263 @@ export class FreeformRenderer extends Component {
     delBtn.setAttribute('aria-label', 'Delete connection');
     setIcon(delBtn, 'trash-2');
     delBtn.addEventListener('click', (e) => { e.stopPropagation(); this.deleteSelectedConnection(); });
+  }
+
+  private handleCtxEvent(e: CtxEvent): void {
+    const cardId = this.selection.getIds()[0];
+    const card = cardId ? this.board.cards.find(c => c.id === cardId) : null;
+    const el = cardId ? this.cardEls.get(cardId) ?? null : null;
+    const conn = this.selectedConnectionId
+      ? this.board.connections.find(c => c.id === this.selectedConnectionId) ?? null
+      : null;
+
+    switch (e.type) {
+      case 'delete': {
+        if (conn) { this.deleteSelectedConnection(); return; }
+        if (!card || !el) return;
+        this.pushUndo();
+        el.remove();
+        this.cardEls.delete(card.id);
+        this.board.cards = this.board.cards.filter(c => c.id !== card.id);
+        this.selection.clear();
+        this.contextBar.hide();
+        this.scheduleSave();
+        break;
+      }
+      case 'tile-edit': {
+        if (card?.kind !== 'tile' || !el) return;
+        new TileModal(this.app, this.board.cards, card, () => {
+          this.renderCardContent(el, card); this.bindCardEvents(el, card); this.scheduleSave();
+        }).open();
+        break;
+      }
+      case 'sticky-format': {
+        this.activeStickyApplyTag?.(e.cmd);
+        break;
+      }
+      case 'sticky-color': {
+        if (card?.kind !== 'sticky' || !el) return;
+        this.pushUndo();
+        card.color = e.hex;
+        el.style.backgroundColor = e.hex;
+        this.scheduleSave();
+        break;
+      }
+      case 'sticky-top-color': {
+        if (card?.kind !== 'sticky' || !el) return;
+        this.pushUndo();
+        card.topColor = e.hex ?? undefined;
+        let strip = el.querySelector<HTMLElement>('.ib-card-top-strip');
+        if (card.topColor) {
+          if (!strip) {
+            strip = el.createDiv('ib-card-top-strip');
+            el.insertBefore(strip, el.firstChild);
+          }
+          strip.style.backgroundColor = card.topColor;
+        } else {
+          strip?.remove();
+        }
+        this.scheduleSave();
+        break;
+      }
+      case 'checklist-accent': {
+        if (card?.kind !== 'checklist' || !el) return;
+        this.pushUndo();
+        card.accentColor = e.hex;
+        const accentBarA = el.querySelector<HTMLElement>('.icon-board-checklist-accent');
+        if (accentBarA) accentBarA.style.backgroundColor = e.hex;
+        this.scheduleSave();
+        break;
+      }
+      case 'checklist-bg': {
+        if (card?.kind !== 'checklist' || !el) return;
+        this.pushUndo();
+        card.color = e.hex;
+        el.style.backgroundColor = e.hex;
+        this.scheduleSave();
+        break;
+      }
+      case 'checklist-top-color': {
+        if (card?.kind !== 'checklist' || !el) return;
+        this.pushUndo();
+        card.accentColor = e.hex ?? undefined;
+        let bar = el.querySelector<HTMLElement>('.icon-board-checklist-accent');
+        if (card.accentColor) {
+          if (!bar) { bar = el.createDiv('icon-board-checklist-accent'); el.insertBefore(bar, el.firstChild); }
+          bar.style.backgroundColor = card.accentColor;
+        } else {
+          bar?.remove();
+        }
+        this.scheduleSave();
+        break;
+      }
+      case 'checklist-title': {
+        if (card?.kind !== 'checklist' || !el) return;
+        this.pushUndo();
+        if (card.titleHidden) {
+          card.titleHidden = false;
+          this.rebuildChecklistCard(card); this.refreshSelectionVisuals();
+          setTimeout(() => (this.cardEls.get(card.id)?.querySelector<HTMLElement>('.icon-board-checklist-title'))?.focus(), 0);
+        } else {
+          card.titleHidden = true;
+          this.rebuildChecklistCard(card); this.refreshSelectionVisuals();
+        }
+        this.scheduleSave();
+        break;
+      }
+      case 'image-caption': {
+        if (card?.kind !== 'image' || !el) return;
+        this.pushUndo();
+        card.captionHidden = !card.captionHidden;
+        const wrap = el.querySelector<HTMLElement>('.icon-board-image-caption-wrap');
+        if (wrap) wrap.toggleClass('is-hidden', !!card.captionHidden);
+        if (!card.captionHidden) {
+          // Caption was just shown — click the view to enter edit mode
+          setTimeout(() => {
+            el.querySelector<HTMLElement>('.icon-board-image-caption-view')?.click();
+          }, 0);
+        }
+        this.scheduleSave();
+        break;
+      }
+      case 'notelink-display': {
+        if (card?.kind !== 'note-link' || !el) return;
+        this.pushUndo();
+        card.displayMode = card.displayMode === 'preview' ? 'title-only' : 'preview';
+        this.renderCardContent(el, card); this.bindCardEvents(el, card); this.scheduleSave();
+        break;
+      }
+      case 'notelink-open': {
+        if (card?.kind !== 'note-link') return;
+        const file = this.app.vault.getAbstractFileByPath(card.path);
+        if (file instanceof TFile) this.app.workspace.openLinkText(file.path, '', true);
+        break;
+      }
+      case 'bookmark-refresh': {
+        if (card?.kind !== 'bookmark' || !el) return;
+        card.fetchFailed = false; card.fetchedAt = undefined;
+        this.renderCardContent(el, card); this.bindCardEvents(el, card);
+        this.fetchAndUpdateBookmark(card, el);
+        break;
+      }
+      case 'bookmark-copy-url': {
+        if (card?.kind !== 'bookmark') return;
+        navigator.clipboard.writeText(card.url); new Notice('URL copied.');
+        break;
+      }
+      case 'kanban-color': {
+        if (card?.kind !== 'kanban-column') return;
+        this.pushUndo();
+        card.color = e.hex;
+        this.rebuildKanbanCard(card);
+        this.scheduleSave();
+        break;
+      }
+      case 'kanban-bg': {
+        if (card?.kind !== 'kanban-column' || !el) return;
+        this.pushUndo();
+        card.bgColor = e.hex ?? undefined;
+        el.style.backgroundColor = card.bgColor ?? '';
+        this.scheduleSave();
+        break;
+      }
+      case 'kanban-top-color': {
+        if (card?.kind !== 'kanban-column' || !el) return;
+        this.pushUndo();
+        card.topColor = e.hex ?? undefined;
+        let strip = el.querySelector<HTMLElement>('.ib-card-top-strip');
+        if (card.topColor) {
+          if (!strip) {
+            strip = el.createDiv('ib-card-top-strip');
+            el.insertBefore(strip, el.firstChild);
+          }
+          strip.style.backgroundColor = card.topColor;
+        } else {
+          strip?.remove();
+        }
+        this.scheduleSave();
+        break;
+      }
+      case 'kanban-title': {
+        if (card?.kind !== 'kanban-column' || !el) return;
+        this.pushUndo();
+        if (card.titleHidden) {
+          card.titleHidden = false;
+          this.rebuildKanbanCard(card);
+          this.refreshSelectionVisuals();
+          this.scheduleSave();
+          setTimeout(() => {
+            const newEl = this.cardEls.get(card.id);
+            const titleEl = newEl?.querySelector<HTMLElement>('.icon-board-kanban-title');
+            if (newEl && titleEl) this.editKanbanTitle(card, newEl, titleEl);
+          }, 0);
+        } else {
+          card.titleHidden = true;
+          this.rebuildKanbanCard(card);
+          this.refreshSelectionVisuals();
+          this.scheduleSave();
+        }
+        break;
+      }
+      case 'kanban-add-col': {
+        if (card?.kind !== 'kanban-column') return;
+        const newCard: KanbanColumnCard = {
+          id: crypto.randomUUID(), kind: 'kanban-column',
+          x: card.x + card.w + 20, y: card.y,
+          w: KANBAN_DEFAULT_W, h: KANBAN_DEFAULT_H, z: this.nextZ(),
+          color: '#6b7280', items: [],
+        };
+        this.pushUndo();
+        this.board.cards.push(newCard);
+        this.createCardEl(newCard);
+        this.selection.select(newCard.id);
+        this.refreshSelectionVisuals();
+        setTimeout(() => {
+          const newEl = this.cardEls.get(newCard.id);
+          const titleEl = newEl?.querySelector<HTMLElement>('.icon-board-kanban-title');
+          if (newEl && titleEl) this.editKanbanTitle(newCard, newEl, titleEl);
+        }, 50);
+        this.scheduleSave();
+        break;
+      }
+      case 'conn-style': {
+        if (!conn) return;
+        this.pushUndo();
+        conn.style = conn.style === 'solid' ? 'dashed' : 'solid';
+        this.rerenderConnection(conn);
+        this.showConnectionProps(conn);
+        this.scheduleSave();
+        break;
+      }
+      case 'conn-color': {
+        if (!conn) return;
+        this.pushUndo();
+        conn.color = e.hex;
+        this.rerenderConnection(conn);
+        this.showConnectionProps(conn);
+        this.scheduleSave();
+        break;
+      }
+      case 'conn-arrow': {
+        if (!conn) return;
+        this.pushUndo();
+        const arrowCycle: Array<Connection['arrowhead']> = ['end', 'both', 'none'];
+        conn.arrowhead = arrowCycle[(arrowCycle.indexOf(conn.arrowhead) + 1) % arrowCycle.length];
+        this.rerenderConnection(conn);
+        this.showConnectionProps(conn);
+        this.scheduleSave();
+        break;
+      }
+      case 'conn-route': {
+        if (!conn) return;
+        this.pushUndo();
+        conn.routing = conn.routing === 'straight' ? 'elbow' : 'straight';
+        this.rerenderConnection(conn);
+        this.showConnectionProps(conn);
+        this.scheduleSave();
+        break;
+      }
+    }
   }
 
   private hideConnectionProps(): void {

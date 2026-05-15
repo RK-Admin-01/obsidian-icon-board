@@ -60,6 +60,7 @@ export interface StickyCard extends BaseCard {
   kind: 'sticky';
   text: string;
   color: string;
+  topColor?: string;
   textScale?: 'sm' | 'md' | 'lg';
   textColor?: string;
   textAlign?: 'left' | 'center' | 'right' | 'justify';
@@ -76,7 +77,8 @@ export interface ChecklistItem {
 export interface ChecklistCard extends BaseCard {
   kind: 'checklist';
   title?: string;
-  accentColor: string;  // hex; top accent bar colour
+  titleHidden?: boolean;
+  accentColor?: string;  // hex; top accent bar colour (undefined = no bar)
   items: ChecklistItem[];
   color: string;
 }
@@ -128,7 +130,11 @@ export interface KanbanItem {
 export interface KanbanColumnCard extends BaseCard {
   kind: 'kanban-column';
   title?: string;
+  titleHidden?: boolean;
   color: string;
+  bgColor?: string;
+  topColor?: string;
+  collapsed?: boolean;
   wipLimit?: number;
   items: KanbanItem[];
 }

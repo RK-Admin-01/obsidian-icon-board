@@ -26,6 +26,7 @@ export interface IconBoardSettings {
   bookmarkCacheDays?: number;   // days before re-fetching bookmark OG metadata; default 30
   defaultStickyColor?: string;  // hex color used when creating new sticky notes
   toolbarPosition?: 'left' | 'right' | 'top' | 'bottom';
+  autoRelinkOnOpen?: boolean;   // silently fix broken asset paths when a board is opened
 }
 
 export const DEFAULT_SETTINGS: IconBoardSettings = {

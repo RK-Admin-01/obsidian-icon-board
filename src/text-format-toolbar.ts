@@ -73,18 +73,54 @@ export class TextFormatToolbar {
 
   private buildFormatRow(parent: HTMLElement): void {
     const row = parent.createDiv('icon-board-text-fmt-inline-row');
-    const mkBtn = (label: string, cmd: string) => {
+    const mkBtn = (label: string, tag: string, title: string, style?: string) => {
       const btn = row.createDiv('icon-board-text-fmt-inline-btn');
-      btn.setText(label);
-      btn.setAttribute('title', cmd === 'bold' ? 'Bold' : cmd === 'italic' ? 'Italic' : 'Strikethrough');
-      btn.addEventListener('click', () => {
-        this.restoreSelection();
-        document.execCommand(cmd, false);
-      });
+      btn.setAttribute('title', title);
+      if (style) btn.style.cssText = style;
+      btn.createEl('span', { text: label });
+      btn.addEventListener('click', () => this.applyInlineTag(tag));
     };
-    mkBtn('B', 'bold');
-    mkBtn('I', 'italic');
-    mkBtn('S', 'strikeThrough');
+    mkBtn('B', 'strong', 'Bold (⌘B)', 'font-weight:700');
+    mkBtn('I', 'em',     'Italic (⌘I)', 'font-style:italic');
+    mkBtn('S', 's',      'Strikethrough (⌘⇧S)', 'text-decoration:line-through');
+    mkBtn('U', 'u',      'Underline (⌘U)', 'text-decoration:underline');
+  }
+
+  // ── Inline tag toggle (bold, italic, strikethrough, underline) ─
+
+  public applyInlineTag(tag: string): void {
+    this.restoreSelection();
+    const sel = window.getSelection();
+    if (!sel || !sel.rangeCount) return;
+    const range = sel.getRangeAt(0);
+    if (range.collapsed) return;
+
+    // Toggle off if entire selection sits inside an element of this tag
+    const ancestor = range.commonAncestorContainer;
+    const existingWrapper = (ancestor.nodeType === Node.ELEMENT_NODE
+      ? ancestor as Element
+      : ancestor.parentElement
+    )?.closest(tag);
+    if (existingWrapper && this.editor.contains(existingWrapper)) {
+      const children = Array.from(existingWrapper.childNodes);
+      const parent = existingWrapper.parentNode!;
+      while (existingWrapper.firstChild) parent.insertBefore(existingWrapper.firstChild, existingWrapper);
+      existingWrapper.remove();
+      if (children.length > 0 && parent.contains(children[0]) && parent.contains(children[children.length - 1])) {
+        const nr = document.createRange();
+        nr.setStartBefore(children[0]);
+        nr.setEndAfter(children[children.length - 1]);
+        sel.removeAllRanges(); sel.addRange(nr);
+      } else {
+        sel.removeAllRanges();
+      }
+    } else {
+      const wrapper = document.createElement(tag);
+      this.wrapRange(range, wrapper);
+      const nr = document.createRange();
+      nr.selectNodeContents(wrapper);
+      sel.removeAllRanges(); sel.addRange(nr);
+    }
   }
 
   private buildSection(

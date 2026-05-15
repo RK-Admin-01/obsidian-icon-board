@@ -4,6 +4,7 @@ import { IconBoardSettingsTab } from './settings';
 import { IconBoardSettings, DEFAULT_SETTINGS } from './types';
 import { CreateBoardModal } from './create-board-modal';
 import { needsMigration, migrateV1toV2 } from './migration';
+import { relinkAllBoards } from './asset-manager';
 
 export default class IconBoardPlugin extends Plugin {
   settings: IconBoardSettings;
@@ -40,6 +41,18 @@ export default class IconBoardPlugin extends Plugin {
         new CreateBoardModal(this.app, this, async (file) => {
           await this.openBoardFile(file);
         }).open();
+      },
+    });
+
+    // Command: relink all board assets
+    this.addCommand({
+      id: 'relink-board-assets',
+      name: 'Relink all board assets',
+      callback: async () => {
+        const n = await relinkAllBoards(this.app);
+        new Notice(n > 0
+          ? `Icon Board: Fixed ${n} broken link${n === 1 ? '' : 's'} across all boards.`
+          : 'Icon Board: No broken links found.');
       },
     });
 

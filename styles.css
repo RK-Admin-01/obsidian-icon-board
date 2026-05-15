@@ -7,6 +7,13 @@
 body {
   --ib-font-display: 'New York', Georgia, 'Book Antiqua', 'Palatino Linotype', serif;
   --ib-font-body: var(--font-text);
+  --ib-card-bg: #FFFFFF;
+  --ib-card-text: #323B4A;
+}
+
+body.theme-dark {
+  --ib-card-bg: #333333;
+  --ib-card-text: #F2F2F2;
 }
 
 /* ── Elevation shadow system ─────────────────────────────────── */
@@ -291,20 +298,28 @@ body.theme-dark {
 
 .icon-board-card-resize-handle {
   position: absolute;
-  bottom: 4px;
-  right: 4px;
-  width: 12px;
-  height: 12px;
+  width: 10px;
+  height: 10px;
   background: var(--interactive-accent);
-  border-radius: 1px;
-  cursor: se-resize;
+  border-radius: 2px;
   opacity: 0;
   transition: opacity 100ms ease;
+  z-index: 10;
 }
 
 .icon-board-freeform-card.is-selected .icon-board-card-resize-handle {
   opacity: 1;
 }
+
+.icon-board-card-resize-handle--nw { top: 4px;    left: 4px;  cursor: nw-resize; }
+.icon-board-card-resize-handle--ne { top: 4px;    right: 4px; cursor: ne-resize; }
+.icon-board-card-resize-handle--sw { bottom: 4px; left: 4px;  cursor: sw-resize; }
+.icon-board-card-resize-handle--se { bottom: 4px; right: 4px; cursor: se-resize; }
+
+.icon-board-freeform-sticky-card .icon-board-card-resize-handle--nw,
+.icon-board-freeform-sticky-card .icon-board-card-resize-handle--sw { cursor: w-resize; }
+.icon-board-freeform-sticky-card .icon-board-card-resize-handle--ne,
+.icon-board-freeform-sticky-card .icon-board-card-resize-handle--se { cursor: e-resize; }
 
 /* ── Marquee ────────────────────────────────────────────────── */
 
@@ -546,6 +561,12 @@ body.theme-dark {
     overflow-x: auto;
   }
 
+  .ib-add-panel {
+    flex-direction: row !important;
+    width: auto !important;
+    height: 100%;
+  }
+
   .icon-board-tb-overflow-sep {
     width: 1px !important;
     height: 32px !important;
@@ -564,6 +585,189 @@ body.theme-dark {
   .icon-board-freeform-toolbar-fab {
     display: none;
   }
+}
+
+/* ── Context bar slot ────────────────────────────────────────── */
+
+/* Add panel: flex wrapper for the toolbar buttons */
+.ib-add-panel {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+.tb-pos-left .ib-add-panel,
+.tb-pos-right .ib-add-panel {
+  flex-direction: column;
+  width: 100%;
+}
+.tb-pos-top .ib-add-panel,
+.tb-pos-bottom .ib-add-panel {
+  flex-direction: row;
+  height: 100%;
+}
+.ib-ctx-active .ib-add-panel {
+  display: none;
+}
+
+/* Context panel: hidden by default */
+.ib-ctx-panel {
+  display: none;
+  flex-direction: column;
+  align-items: center;
+  width: 100%;
+  gap: 4px;
+}
+.ib-ctx-active .ib-ctx-panel {
+  display: flex;
+}
+
+/* Back button */
+.ib-ctx-back-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 32px;
+  border-radius: 8px;
+  cursor: pointer;
+  color: var(--text-muted);
+  flex-shrink: 0;
+  transition: background 80ms ease, color 80ms ease;
+}
+.ib-ctx-back-btn:hover,
+.ib-ctx-back-btn:focus-visible {
+  background: var(--background-modifier-hover);
+  color: var(--text-normal);
+  outline: none;
+}
+.ib-ctx-back-btn svg {
+  width: 18px;
+  height: 18px;
+}
+
+/* Spacer and separator before trash */
+.ib-ctx-spacer {
+  height: 8px;
+  flex-shrink: 0;
+}
+.ib-ctx-trash-sep {
+  width: 40px;
+  height: 1px;
+  background: var(--background-modifier-border);
+  flex-shrink: 0;
+  margin: 2px 0;
+}
+
+/* Trash confirm state */
+.ib-ctx-trash--confirm {
+  background: rgba(239, 68, 68, 0.15) !important;
+  color: #ef4444 !important;
+}
+
+/* Color swatch grid */
+.ib-ctx-color-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  padding: 2px 0;
+  width: 100%;
+  justify-content: center;
+}
+.ib-ctx-color-swatch {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: transform 80ms ease;
+}
+.ib-ctx-color-swatch:hover {
+  transform: scale(1.2);
+}
+
+/* "None" swatch — diagonal slash to indicate removal */
+.ib-ctx-color-swatch--none {
+  background: #ffffff;
+  box-shadow: inset 0 0 0 1px rgba(0,0,0,0.15);
+  position: relative;
+  overflow: hidden;
+}
+.ib-ctx-color-swatch--none::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(135deg, transparent 45%, #ef4444 45%, #ef4444 55%, transparent 55%);
+}
+
+/* Two-tab color picker (Background / Top strip) — stacked to fit 72px panel */
+.ib-ctx-tab-row {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  gap: 2px;
+  padding: 0 4px;
+}
+.ib-ctx-tab {
+  width: 100%;
+  text-align: center;
+  font-size: 9px;
+  font-family: var(--ib-font-body);
+  color: var(--text-muted);
+  padding: 4px 4px;
+  border-radius: 5px;
+  cursor: pointer;
+  background: transparent;
+  transition: background 80ms, color 80ms;
+  line-height: 1.2;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.ib-ctx-tab:hover {
+  background: var(--background-modifier-hover);
+  color: var(--text-normal);
+}
+.ib-ctx-tab--active {
+  background: var(--interactive-accent);
+  color: #ffffff !important;
+}
+.ib-ctx-swatch-area {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 100%;
+  gap: 2px;
+}
+
+/* Custom color wheel input — invisible, triggered by its sibling button */
+.ib-ctx-color-wheel-input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* ── Toolbar drag ghost ──────────────────────────────────────── */
+.ib-toolbar-drag-ghost {
+  position: fixed;
+  width: 44px;
+  height: 44px;
+  background: var(--interactive-accent);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+  z-index: 9999;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25);
+  color: white;
+  transform: translate(-50%, -50%);
+  opacity: 0.92;
+}
+.ib-toolbar-drag-ghost svg {
+  width: 22px;
+  height: 22px;
 }
 
 /* ── Connection properties panel ───────────────────────────── */
@@ -776,7 +980,7 @@ body.theme-dark {
   border-radius: 10px;
   border: 1px solid var(--background-modifier-border);
   box-shadow: var(--ib-shadow-low);
-  background: var(--background-primary);
+  background: var(--ib-card-bg);
   overflow: hidden;
   gap: 0;
   padding: 0;
@@ -785,31 +989,42 @@ body.theme-dark {
 .icon-board-kanban-header {
   display: flex;
   flex-direction: column;
+  align-items: center;
   justify-content: center;
   gap: 2px;
-  padding: 14px 16px 12px;
+  padding: 12px 36px 10px;
   flex-shrink: 0;
   cursor: grab;
   border-bottom: 1px solid var(--background-modifier-border);
   user-select: none;
-  min-height: 56px;
+  min-height: 52px;
+  position: relative;
+}
+
+.icon-board-freeform-kanban-card.is-collapsed .icon-board-kanban-header {
+  border-bottom: none;
 }
 
 .icon-board-kanban-header:active {
   cursor: grabbing;
 }
 
-.icon-board-kanban-title {
+/* ── Shared card-header title style ─────────────────────────── */
+
+.icon-board-kanban-title,
+.icon-board-checklist-title {
   font-family: var(--ib-font-display);
-  font-size: 18px;
+  font-size: 16px;
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.06em;
-  color: var(--text-normal);
+  color: var(--text-muted);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
   line-height: 1.2;
+  text-align: center;
+  max-width: 100%;
 }
 
 .icon-board-kanban-title.icon-board-kanban-title-empty {
@@ -820,6 +1035,7 @@ body.theme-dark {
 .icon-board-kanban-count-row {
   display: flex;
   align-items: center;
+  justify-content: center;
   gap: 6px;
 }
 
@@ -828,6 +1044,51 @@ body.theme-dark {
   font-size: 12px;
   font-weight: 400;
   color: var(--text-muted);
+  text-align: center;
+}
+
+/* Collapse toggle button */
+.icon-board-kanban-collapse-btn {
+  position: absolute;
+  top: 50%;
+  right: 10px;
+  transform: translateY(-50%);
+  width: 20px;
+  height: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+  cursor: pointer;
+  color: var(--text-muted);
+  opacity: 0;
+  transition: opacity 80ms, background 80ms, color 80ms;
+}
+.icon-board-kanban-collapse-btn svg {
+  width: 13px;
+  height: 13px;
+  transition: transform 200ms ease;
+}
+.icon-board-kanban-header:hover .icon-board-kanban-collapse-btn,
+.icon-board-freeform-kanban-card.is-collapsed .icon-board-kanban-collapse-btn {
+  opacity: 1;
+}
+.icon-board-kanban-collapse-btn:hover {
+  background: var(--background-modifier-hover);
+  color: var(--text-normal);
+}
+.icon-board-freeform-kanban-card.is-collapsed .icon-board-kanban-collapse-btn svg {
+  transform: rotate(-90deg);
+}
+
+/* Collapsed state: hide items/add-btn and shrink to header only */
+.icon-board-freeform-kanban-card.is-collapsed {
+  height: auto !important;
+}
+.icon-board-freeform-kanban-card.is-collapsed .icon-board-kanban-items,
+.icon-board-freeform-kanban-card.is-collapsed .icon-board-kanban-add-btn,
+.icon-board-freeform-kanban-card.is-collapsed .icon-board-card-resize-handle {
+  display: none;
 }
 
 .icon-board-kanban-wip-dot {
@@ -850,13 +1111,13 @@ body.theme-dark {
 }
 
 .icon-board-kanban-item {
-  background: var(--background-primary);
+  background: var(--ib-card-bg);
   border: 1px solid var(--background-modifier-border);
   border-radius: 6px;
   padding: 10px 12px;
   font-size: 13px;
   font-family: var(--ib-font-body);
-  color: var(--text-normal);
+  color: var(--ib-card-text);
   line-height: 1.5;
   flex-shrink: 0;
   display: flex;
@@ -865,6 +1126,12 @@ body.theme-dark {
   cursor: pointer;
   position: relative;
   overflow: hidden;
+}
+
+.icon-board-kanban-item:focus {
+  outline: none;
+  border-color: var(--interactive-accent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--interactive-accent) 30%, transparent);
 }
 
 .icon-board-kanban-item.is-done {
@@ -971,6 +1238,24 @@ body.theme-dark {
 
 .icon-board-kanban-item.has-image {
   padding: 0;
+  gap: 0;
+  display: block;
+}
+
+.icon-board-kanban-item.has-image .icon-board-kanban-item-cb,
+.icon-board-kanban-item.has-image .icon-board-kanban-item-del,
+.icon-board-kanban-item.has-image .icon-board-kanban-item-text {
+  display: none;
+}
+
+.icon-board-kanban-item.has-image .icon-board-kanban-item-body {
+  display: block;
+  width: 100%;
+}
+
+.icon-board-kanban-item.has-image .icon-board-kanban-item-image {
+  display: block;
+  line-height: 0;
 }
 
 .icon-board-kanban-item-image {
@@ -1190,19 +1475,24 @@ body.theme-dark {
 .icon-board-freeform-sticky-card {
   align-items: stretch;
   justify-content: flex-start;
-  padding: 12px;
+  padding: 0;
   border-radius: 3px;
   box-shadow: var(--ib-shadow-low);
   gap: 0;
   overflow: hidden;
 }
 
+.icon-board-sticky-inner {
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  min-height: 44px;
+}
+
 .icon-board-sticky-text {
-  flex: 1;
-  overflow: hidden;
   font-size: 14px;
   line-height: 1.5;
-  color: rgba(0,0,0,0.75);
+  color: var(--ib-card-text);
   word-break: break-word;
   cursor: text;
   /* let clicks through to the card div for dragging */
@@ -1215,25 +1505,24 @@ body.theme-dark {
 .icon-board-sticky-text del { text-decoration: line-through; }
 
 .icon-board-sticky-editor {
-  flex: 1;
   width: 100%;
-  min-height: 0;
+  min-height: 20px;
   background: transparent;
   border: none;
   outline: none;
   font-size: 14px;
   line-height: 1.5;
   font-family: var(--font-text);
-  color: rgba(0,0,0,0.75);
+  color: var(--ib-card-text);
   padding: 0;
   word-break: break-word;
-  overflow-y: auto;
   cursor: text;
 }
 
 .icon-board-sticky-editor:empty::before {
   content: 'Start typing…';
-  color: rgba(0,0,0,0.35);
+  color: var(--ib-card-text);
+  opacity: 0.4;
   font-style: italic;
   pointer-events: none;
 }
@@ -1298,8 +1587,7 @@ body.theme-dark {
   color: var(--text-on-accent);
 }
 
-.icon-board-text-fmt-inline-btn:nth-child(2) { font-style: italic; font-weight: 400; }
-.icon-board-text-fmt-inline-btn:nth-child(3) { text-decoration: line-through; font-weight: 400; }
+/* button label styles are applied inline by buildFormatRow */
 
 .icon-board-text-fmt-section {
   display: flex;
@@ -1399,33 +1687,37 @@ body.theme-dark {
   box-shadow: var(--ib-shadow-low);
   gap: 0;
   overflow: hidden;
+  background: var(--ib-card-bg);
 }
 
 .icon-board-freeform-checklist-card.is-selected {
   box-shadow: var(--ib-shadow-mid);
 }
 
-/* 4px accent bar at top */
+/* 4px accent bar at top — shared by checklist, sticky, and kanban */
+.ib-card-top-strip,
 .icon-board-checklist-accent {
   width: 100%;
-  height: 4px;
+  height: 5px;
   flex-shrink: 0;
-  border-radius: 6px 6px 0 0;
 }
 
 .icon-board-checklist-title {
   width: 100%;
   background: transparent !important;
   border: none !important;
+  box-shadow: none !important;
   outline: none;
-  font-family: var(--ib-font-display);
-  font-size: 15px;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  color: var(--text-normal);
   padding: 10px 12px 6px;
   box-sizing: border-box;
+  /* Input elements ignore inherited font rules — force them explicitly */
+  font-family: var(--ib-font-display) !important;
+  font-size: 16px !important;
+  font-weight: 700 !important;
+  text-transform: uppercase !important;
+  letter-spacing: 0.06em !important;
+  color: var(--text-muted) !important;
+  text-align: left !important;
 }
 
 .icon-board-checklist-list {
@@ -1476,7 +1768,7 @@ body.theme-dark {
   flex: 1;
   outline: none;
   font-size: 12px;
-  color: var(--text-normal);
+  color: var(--ib-card-text);
   min-width: 0;
   word-break: break-word;
   line-height: 1.4;
@@ -1574,7 +1866,7 @@ body.theme-dark {
   box-shadow: var(--ib-shadow-low);
   gap: 0;
   overflow: hidden;
-  background: var(--background-secondary);
+  background: var(--ib-card-bg);
 }
 
 .icon-board-notelink-titlebar {
@@ -1584,7 +1876,7 @@ body.theme-dark {
   padding: 8px 10px;
   border-bottom: 1px solid var(--background-modifier-border);
   flex-shrink: 0;
-  background: var(--background-secondary);
+  background: var(--ib-card-bg);
   cursor: grab;
 }
 
@@ -1603,8 +1895,8 @@ body.theme-dark {
 .icon-board-notelink-title {
   flex: 1;
   font-size: 13px;
-  font-weight: 600;
-  color: var(--text-normal);
+  font-weight: 700;
+  color: var(--ib-card-text);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1642,7 +1934,7 @@ body.theme-dark {
   font-size: 13px;
   line-height: 1.5;
   min-height: 0;
-  background: var(--background-primary);
+  background: var(--ib-card-bg);
 }
 
 .icon-board-notelink-preview > * { pointer-events: none; }
@@ -1655,7 +1947,7 @@ body.theme-dark {
   padding: 0;
   border-radius: 3px;
   overflow: visible;
-  background: var(--background-secondary);
+  background: transparent;
   border: 1px solid var(--background-modifier-border);
   gap: 0;
 }
@@ -1751,7 +2043,7 @@ body.theme-dark {
   align-items: stretch;
   justify-content: flex-start;
   padding: 0;
-  background: var(--background-secondary);
+  background: var(--ib-card-bg);
   border: 1px solid var(--background-modifier-border);
   border-radius: 3px;
   overflow: hidden;
@@ -1784,8 +2076,8 @@ body.theme-dark {
 
 .icon-board-audio-title {
   font-size: 13px;
-  font-weight: 500;
-  color: var(--text-normal);
+  font-weight: 700;
+  color: var(--ib-card-text);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -1814,7 +2106,7 @@ body.theme-dark {
   border: 1px solid var(--background-modifier-border);
   box-shadow: var(--ib-shadow-low);
   overflow: hidden;
-  background: var(--background-secondary);
+  background: var(--ib-card-bg);
   gap: 0;
   cursor: pointer;
 }
@@ -1846,8 +2138,8 @@ body.theme-dark {
 
 .icon-board-bookmark-title {
   font-size: 13px;
-  font-weight: 600;
-  color: var(--text-normal);
+  font-weight: 700;
+  color: var(--ib-card-text);
   display: -webkit-box;
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
