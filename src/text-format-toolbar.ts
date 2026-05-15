@@ -5,7 +5,7 @@
 // card's HTML field. Obsidian's MarkdownRenderer passes inline HTML through on render.
 // Same-type wrappers are always flattened before a new one is applied (no nesting).
 
-import { setIcon } from 'obsidian';
+import { setIcon, activeDocument } from 'obsidian';
 
 const TEXT_COLORS: (string | null)[] = [
   null,      // Default — removes colour
@@ -36,7 +36,7 @@ export class TextFormatToolbar {
     this.onOutside   = (e: MouseEvent) => {
       if (this.popover && !this.popover.contains(e.target as Node)) this.dismiss();
     };
-    document.addEventListener('selectionchange', this.onSelChange);
+    activeDocument.addEventListener('selectionchange', this.onSelChange);
   }
 
   // ── Selection check ────────────────────────────────────────────
@@ -68,7 +68,7 @@ export class TextFormatToolbar {
     this.buildSection(pop, 'Highlight', HIGHLIGHT_COLORS, hex => this.applyHighlight(hex), 'highlight');
 
     this.position(pop);
-    window.setTimeout(() => document.addEventListener('mousedown', this.onOutside), 0);
+    window.setTimeout(() => activeDocument.addEventListener('mousedown', this.onOutside), 0);
   }
 
   private buildFormatRow(parent: HTMLElement): void {
@@ -107,7 +107,7 @@ export class TextFormatToolbar {
       while (existingWrapper.firstChild) parent.insertBefore(existingWrapper.firstChild, existingWrapper);
       existingWrapper.remove();
       if (children.length > 0 && parent.contains(children[0]) && parent.contains(children[children.length - 1])) {
-        const nr = document.createRange();
+        const nr = activeDocument.createRange();
         nr.setStartBefore(children[0]);
         nr.setEndAfter(children[children.length - 1]);
         sel.removeAllRanges(); sel.addRange(nr);
@@ -115,9 +115,9 @@ export class TextFormatToolbar {
         sel.removeAllRanges();
       }
     } else {
-      const wrapper = document.createElement(tag);
+      const wrapper = activeDocument.createElement(tag);
       this.wrapRange(range, wrapper);
-      const nr = document.createRange();
+      const nr = activeDocument.createRange();
       nr.selectNodeContents(wrapper);
       sel.removeAllRanges(); sel.addRange(nr);
     }
@@ -138,7 +138,7 @@ export class TextFormatToolbar {
     const customSw = row.createDiv('icon-board-text-fmt-swatch');
     customSw.addClass('is-custom');
     setIcon(customSw, 'pipette');
-    const colorInput = customSw.createEl('input') as HTMLInputElement;
+    const colorInput = customSw.createEl('input');
     colorInput.type = 'color';
     colorInput.className = 'icon-board-text-fmt-custom-input';
     colorInput.addEventListener('pointerdown', e => e.stopPropagation());
@@ -208,7 +208,7 @@ export class TextFormatToolbar {
     const range = sel.getRangeAt(0);
     if (range.collapsed) return;
     if (hex === null) this.unwrapRange(range, 'span');
-    else { const s = document.createElement('span'); s.style.color = hex; this.wrapRange(range, s); }
+    else { const s = activeDocument.createElement('span'); s.style.color = hex; this.wrapRange(range, s); }
     sel.removeAllRanges();
   }
 
@@ -219,7 +219,7 @@ export class TextFormatToolbar {
     const range = sel.getRangeAt(0);
     if (range.collapsed) return;
     if (hex === null) this.unwrapRange(range, 'mark');
-    else { const m = document.createElement('mark'); m.style.background = hex; this.wrapRange(range, m); }
+    else { const m = activeDocument.createElement('mark'); m.style.background = hex; this.wrapRange(range, m); }
     sel.removeAllRanges();
   }
 
@@ -237,7 +237,7 @@ export class TextFormatToolbar {
     const tag = wrapper.tagName.toLowerCase();
     // Extract selection, flatten any same-type tags inside, then rewrap
     const extracted = range.extractContents();
-    const tmp = document.createElement('div');
+    const tmp = activeDocument.createElement('div');
     tmp.appendChild(extracted);
     tmp.querySelectorAll(tag).forEach(el => el.replaceWith(...Array.from(el.childNodes)));
     while (tmp.firstChild) wrapper.appendChild(tmp.firstChild);
@@ -247,10 +247,10 @@ export class TextFormatToolbar {
 
   private unwrapRange(range: Range, tag: string): void {
     const extracted = range.extractContents();
-    const tmp = document.createElement('div');
+    const tmp = activeDocument.createElement('div');
     tmp.appendChild(extracted);
     tmp.querySelectorAll(tag).forEach(el => el.replaceWith(...Array.from(el.childNodes)));
-    const frag = document.createDocumentFragment();
+    const frag = activeDocument.createDocumentFragment();
     while (tmp.firstChild) frag.appendChild(tmp.firstChild);
     range.insertNode(frag);
   }
@@ -260,12 +260,12 @@ export class TextFormatToolbar {
   dismiss(): void {
     this.popover?.remove();
     this.popover = null;
-    document.removeEventListener('mousedown', this.onOutside);
+    activeDocument.removeEventListener('mousedown', this.onOutside);
   }
 
   destroy(): void {
     if (this.debounce !== null) window.clearTimeout(this.debounce);
     this.dismiss();
-    document.removeEventListener('selectionchange', this.onSelChange);
+    activeDocument.removeEventListener('selectionchange', this.onSelChange);
   }
 }

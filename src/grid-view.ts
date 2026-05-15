@@ -150,7 +150,7 @@ export class GridRenderer {
     // Long-press for mobile
     let longPressTimer: ReturnType<typeof setTimeout> | null = null;
     wrapper.addEventListener('pointerdown', (e) => {
-      longPressTimer = setTimeout(() => {
+      longPressTimer = window.setTimeout(() => {
         longPressTimer = null;
         suppressClick = true;
         wrapper.dispatchEvent(
@@ -158,8 +158,8 @@ export class GridRenderer {
         );
       }, 600);
     });
-    wrapper.addEventListener('pointerup', () => { if (longPressTimer) { clearTimeout(longPressTimer); longPressTimer = null; } });
-    wrapper.addEventListener('pointermove', () => { if (longPressTimer) { clearTimeout(longPressTimer); longPressTimer = null; } });
+    wrapper.addEventListener('pointerup', () => { if (longPressTimer) { window.clearTimeout(longPressTimer); longPressTimer = null; } });
+    wrapper.addEventListener('pointermove', () => { if (longPressTimer) { window.clearTimeout(longPressTimer); longPressTimer = null; } });
   }
 
   // ── Tile activation ──────────────────────────────────────────
@@ -178,15 +178,17 @@ export class GridRenderer {
     if (!abstract) { new Notice(`Target no longer exists: ${target.path}`); return; }
 
     if (target.kind === 'note' || target.kind === 'canvas') {
+      if (!(abstract instanceof TFile)) return;
       const leaf = this.app.workspace.getLeaf('tab');
-      await leaf.openFile(abstract as TFile);
+      await leaf.openFile(abstract);
       this.app.workspace.revealLeaf(leaf);
       return;
     }
 
     if (target.kind === 'kanban') {
+      if (!(abstract instanceof TFile)) return;
       const leaf = this.app.workspace.getLeaf('tab');
-      await leaf.openFile(abstract as TFile);
+      await leaf.openFile(abstract);
       this.app.workspace.revealLeaf(leaf);
       const isInstalled = (this.app as any).plugins?.enabledPlugins?.has('obsidian-kanban') ?? false;
       if (!isInstalled) new Notice('Install the community "Kanban" plugin to view this as a board.');
@@ -194,15 +196,15 @@ export class GridRenderer {
     }
 
     if (target.kind === 'folder') {
-      const folder = abstract as TFolder;
+      if (!(abstract instanceof TFolder)) return;
       const explorerLeaves = this.app.workspace.getLeavesOfType('file-explorer');
       if (explorerLeaves.length > 0) {
         const view = explorerLeaves[0].view as any;
-        if (typeof view.revealInFolder === 'function') view.revealInFolder(folder);
+        if (typeof view.revealInFolder === 'function') view.revealInFolder(abstract);
       }
-      const firstNote = folder.children.find(
-        f => f instanceof TFile && (f as TFile).extension === 'md'
-      ) as TFile | undefined;
+      const firstNote = abstract.children.find(
+        (f): f is TFile => f instanceof TFile && f.extension === 'md'
+      );
       if (firstNote) {
         const leaf = this.app.workspace.getLeaf('tab');
         await leaf.openFile(firstNote);

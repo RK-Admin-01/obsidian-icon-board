@@ -1,6 +1,7 @@
 import {
   App, TFile, TFolder, Menu, Notice, Modal, setIcon,
   MarkdownRenderer, Component, FuzzySuggestModal, requestUrl, sanitizeHTMLToDom,
+  activeDocument,
 } from 'obsidian';
 import {
   IconBoardFile, TileCard, StickyCard, ChecklistCard, ChecklistItem, NoteLinkCard,
@@ -359,7 +360,7 @@ export class FreeformRenderer extends Component {
       if (card.kind !== 'bookmark' || card.fetchFailed) continue;
       if (!card.fetchedAt || Date.now() - card.fetchedAt > this.bookmarkCacheDays * 86_400_000) {
         const el = this.cardEls.get(card.id);
-        if (el) this.fetchAndUpdateBookmark(card, el);
+        if (el) void this.fetchAndUpdateBookmark(card, el);
       }
     }
 
@@ -369,8 +370,8 @@ export class FreeformRenderer extends Component {
   destroy(): void {
     this.exitConnectMode();
     this.deselectConnection();
-    document.removeEventListener('keydown', this.docKeyDown);
-    document.removeEventListener('keyup', this.docKeyUp);
+    activeDocument.removeEventListener('keydown', this.docKeyDown);
+    activeDocument.removeEventListener('keyup', this.docKeyUp);
     if (this.saveTimer) { window.clearTimeout(this.saveTimer); this.saveTimer = null; }
     this.unload();
   }
@@ -428,7 +429,7 @@ export class FreeformRenderer extends Component {
     this.outer.addEventListener('keydown', (e) => this.onKeyDown(e));
 
     this.docKeyDown = (e: KeyboardEvent) => {
-      if (e.code === 'Space' && document.activeElement === this.outer) {
+      if (e.code === 'Space' && activeDocument.activeElement === this.outer) {
         e.preventDefault(); this.spaceDown = true;
         if (!this.isPanning) this.setCursor('grab');
       }
@@ -439,8 +440,8 @@ export class FreeformRenderer extends Component {
         if (!this.isPanning) this.setCursor('');
       }
     };
-    document.addEventListener('keydown', this.docKeyDown);
-    document.addEventListener('keyup', this.docKeyUp);
+    activeDocument.addEventListener('keydown', this.docKeyDown);
+    activeDocument.addEventListener('keyup', this.docKeyUp);
 
     // Capture-phase listeners: intercept middle-click / space-drag over any child
     // element before its stopPropagation can block panning.
@@ -513,7 +514,7 @@ export class FreeformRenderer extends Component {
 
     // Clipboard paste
     this.outer.addEventListener('paste', async (e) => {
-      const active = document.activeElement;
+      const active = activeDocument.activeElement;
       if (active instanceof HTMLInputElement || active instanceof HTMLTextAreaElement
         || (active instanceof HTMLElement && active.getAttribute('contenteditable'))) return;
       e.preventDefault();
@@ -749,7 +750,7 @@ export class FreeformRenderer extends Component {
     if (card.textScale) textEl.addClass(`text-scale-${card.textScale}`);
     if (card.textColor) textEl.style.color = card.textColor;
     if (card.textAlign) textEl.style.textAlign = card.textAlign;
-    MarkdownRenderer.render(this.app, card.text || '*Double-click to edit…*', textEl, '', this);
+    void MarkdownRenderer.render(this.app, card.text || '*Double-click to edit…*', textEl, '', this);
     this.appendResizeHandles(el);
   }
 
@@ -765,7 +766,7 @@ export class FreeformRenderer extends Component {
     textEl.hide();
 
     editor.focus();
-    const r = document.createRange();
+    const r = activeDocument.createRange();
     r.selectNodeContents(editor);
     r.collapse(false);
     const s = window.getSelection();
@@ -796,7 +797,7 @@ export class FreeformRenderer extends Component {
         while (existing.firstChild) p.insertBefore(existing.firstChild, existing);
         existing.remove();
         if (children.length > 0 && p.contains(children[0]) && p.contains(children[children.length - 1])) {
-          const nr = document.createRange();
+          const nr = activeDocument.createRange();
           nr.setStartBefore(children[0]);
           nr.setEndAfter(children[children.length - 1]);
           sel.removeAllRanges(); sel.addRange(nr);
@@ -806,15 +807,15 @@ export class FreeformRenderer extends Component {
         }
       } else {
         // Wrap — re-select the new wrapper's contents
-        const wrapper = document.createElement(tag);
+        const wrapper = activeDocument.createElement(tag);
         const extracted = range.extractContents();
-        const tmp = document.createElement('div');
+        const tmp = activeDocument.createElement('div');
         tmp.appendChild(extracted);
         tmp.querySelectorAll(tag).forEach(n => n.replaceWith(...Array.from(n.childNodes)));
         while (tmp.firstChild) wrapper.appendChild(tmp.firstChild);
         range.insertNode(wrapper);
         wrapper.parentElement?.normalize();
-        const nr = document.createRange();
+        const nr = activeDocument.createRange();
         nr.selectNodeContents(wrapper);
         sel.removeAllRanges(); sel.addRange(nr);
         savedRange = nr.cloneRange();
@@ -831,12 +832,12 @@ export class FreeformRenderer extends Component {
       if (!sel || sel.isCollapsed || !editor.contains(sel.anchorNode)) { savedRange = null; return; }
       savedRange = sel.getRangeAt(0).cloneRange();
     };
-    document.addEventListener('selectionchange', onSelChange);
+    activeDocument.addEventListener('selectionchange', onSelChange);
 
     // Register on window (not document) so we fire before Obsidian's document-level
     // capture handlers, which intercept CMD+B/I/U before we ever see them.
     const onFormatKey = (e: KeyboardEvent) => {
-      if (document.activeElement !== editor) return;
+      if (activeDocument.activeElement !== editor) return;
       const meta = e.ctrlKey || e.metaKey;
       if (!meta) return;
       if (!e.shiftKey && e.key.toLowerCase() === 'b') { e.preventDefault(); e.stopPropagation(); e.stopImmediatePropagation(); applyTag('strong'); return; }
@@ -847,7 +848,7 @@ export class FreeformRenderer extends Component {
     window.addEventListener('keydown', onFormatKey, true);
 
     const cleanup = () => {
-      document.removeEventListener('selectionchange', onSelChange);
+      activeDocument.removeEventListener('selectionchange', onSelChange);
       window.removeEventListener('keydown', onFormatKey, true);
       this.activeStickyApplyTag = null;
     };
@@ -859,7 +860,7 @@ export class FreeformRenderer extends Component {
       card.text = editor.innerHTML;
       editor.remove(); textEl.show();
       textEl.empty();
-      MarkdownRenderer.render(this.app, card.text || '*Double-click to edit…*', textEl, '', this);
+      void MarkdownRenderer.render(this.app, card.text || '*Double-click to edit…*', textEl, '', this);
       this.scheduleSave();
     };
     editor.addEventListener('blur', commit);
@@ -886,7 +887,7 @@ export class FreeformRenderer extends Component {
 
     // Title (hidden when titleHidden is true)
     if (!card.titleHidden) {
-      const titleEl = el.createEl('input', { cls: 'icon-board-checklist-title' }) as HTMLInputElement;
+      const titleEl = el.createEl('input', { cls: 'icon-board-checklist-title' });
       titleEl.type = 'text'; titleEl.value = card.title || ''; titleEl.placeholder = 'Checklist';
       titleEl.addEventListener('pointerdown', e => e.stopPropagation());
       titleEl.addEventListener('input', () => { card.title = titleEl.value; });
@@ -908,7 +909,7 @@ export class FreeformRenderer extends Component {
     if (item.isHeader) row.addClass('is-header');
     if (item.parentId) row.addClass('is-child');
 
-    const cb = row.createEl('input') as HTMLInputElement;
+    const cb = row.createEl('input');
     cb.type = 'checkbox'; cb.checked = item.done; cb.className = 'icon-board-checklist-cb';
     if (item.isHeader) this.setHeaderCheckboxState(cb, card, item.id);
 
@@ -996,11 +997,11 @@ export class FreeformRenderer extends Component {
   private appendChecklistGhost(listEl: HTMLElement, card: ChecklistCard): HTMLElement {
     const row = listEl.createDiv('icon-board-checklist-item icon-board-checklist-ghost');
 
-    const cb = row.createEl('input') as HTMLInputElement;
+    const cb = row.createEl('input');
     cb.type = 'checkbox'; cb.className = 'icon-board-checklist-cb'; cb.disabled = true;
     cb.addEventListener('pointerdown', e => e.stopPropagation());
 
-    const input = row.createEl('input') as HTMLInputElement;
+    const input = row.createEl('input');
     input.type = 'text'; input.placeholder = 'Add a task…';
     input.className = 'icon-board-checklist-item-input';
     input.addEventListener('pointerdown', e => e.stopPropagation());
@@ -1092,10 +1093,10 @@ export class FreeformRenderer extends Component {
       const previewEl = el.createDiv('icon-board-notelink-preview');
       const loadPreview = (f: TFile) => {
         if (!el.contains(previewEl)) return;
-        this.app.vault.cachedRead(f).then(content => {
+        void this.app.vault.cachedRead(f).then(content => {
           if (!el.contains(previewEl)) return;
           previewEl.empty();
-          MarkdownRenderer.render(this.app, content, previewEl, f.path, this);
+          void MarkdownRenderer.render(this.app, content, previewEl, f.path, this);
         });
       };
       loadPreview(file);
@@ -1161,7 +1162,7 @@ export class FreeformRenderer extends Component {
     const renderCaptionView = () => {
       captionViewEl.empty();
       if (card.caption) {
-        MarkdownRenderer.render(this.app, card.caption, captionViewEl, '', this);
+        void MarkdownRenderer.render(this.app, card.caption, captionViewEl, '', this);
       } else {
         captionViewEl.createSpan({ cls: 'icon-board-caption-placeholder', text: 'Add caption…' });
       }
@@ -1181,7 +1182,7 @@ export class FreeformRenderer extends Component {
       captionEditor.empty();
       if (card.caption) captionEditor.appendChild(sanitizeHTMLToDom(captionViewEl.innerHTML));
       captionEditor.focus();
-      const r = document.createRange();
+      const r = activeDocument.createRange();
       r.selectNodeContents(captionEditor); r.collapse(false);
       const s = window.getSelection();
       s?.removeAllRanges(); s?.addRange(r);
@@ -1251,14 +1252,14 @@ export class FreeformRenderer extends Component {
         e.stopPropagation(); e.preventDefault();
         card.fetchFailed = false;
         this.renderCardContent(el, card); this.bindCardEvents(el, card);
-        this.fetchAndUpdateBookmark(card, el);
+        void this.fetchAndUpdateBookmark(card, el);
       });
     } else if (!card.title && !card.fetchedAt) {
       const loading = el.createDiv('icon-board-bookmark-loading');
       const spinnerEl = loading.createDiv('icon-board-bookmark-spinner');
       setIcon(spinnerEl, 'loader');
       loading.createDiv({ cls: 'icon-board-bookmark-loading-text', text: 'Fetching preview…' });
-      try { el.createDiv({ cls: 'icon-board-bookmark-domain', text: new URL(card.url).hostname }); } catch {}
+      try { el.createDiv({ cls: 'icon-board-bookmark-domain', text: new URL(card.url).hostname }); } catch { /* ignore */ }
     } else {
       if (card.imageUrl) {
         const imgWrap = el.createDiv('icon-board-bookmark-image-wrap');
@@ -1275,7 +1276,7 @@ export class FreeformRenderer extends Component {
         const fav = footer.createEl('img', { cls: 'icon-board-bookmark-favicon' });
         fav.src = card.favicon; fav.addEventListener('error', () => fav.remove());
       }
-      try { footer.createDiv({ cls: 'icon-board-bookmark-domain', text: new URL(card.url).hostname }); } catch {}
+      try { footer.createDiv({ cls: 'icon-board-bookmark-domain', text: new URL(card.url).hostname }); } catch { /* ignore */ }
     }
 
     this.appendResizeHandles(el);
@@ -1583,18 +1584,18 @@ export class FreeformRenderer extends Component {
       const onMove = (e2: PointerEvent) => {
         if (!wasDragged && Math.hypot(e2.clientX - sx, e2.clientY - sy) > DRAG_THRESHOLD) {
           wasDragged = true;
-          document.removeEventListener('pointermove', onMove);
-          document.removeEventListener('pointerup', onUp);
+          activeDocument.removeEventListener('pointermove', onMove);
+          activeDocument.removeEventListener('pointerup', onUp);
           this.startItemDrag(startE, card, item, itemEl, itemsEl);
         }
       };
       const onUp = () => {
-        document.removeEventListener('pointermove', onMove);
-        document.removeEventListener('pointerup', onUp);
+        activeDocument.removeEventListener('pointermove', onMove);
+        activeDocument.removeEventListener('pointerup', onUp);
         if (!wasDragged) itemEl.focus();
       };
-      document.addEventListener('pointermove', onMove);
-      document.addEventListener('pointerup', onUp);
+      activeDocument.addEventListener('pointermove', onMove);
+      activeDocument.addEventListener('pointerup', onUp);
     });
 
     itemEl.addEventListener('dblclick', (e) => {
@@ -1728,7 +1729,7 @@ export class FreeformRenderer extends Component {
 
     window.requestAnimationFrame(() => {
       editor.focus();
-      const r = document.createRange();
+      const r = activeDocument.createRange();
       r.selectNodeContents(editor); r.collapse(false);
       const s = window.getSelection();
       s?.removeAllRanges(); s?.addRange(r);
@@ -1768,14 +1769,14 @@ export class FreeformRenderer extends Component {
   ): void {
     const itemRect = itemEl.getBoundingClientRect();
 
-    const ghost = document.createElement('div');
+    const ghost = activeDocument.createElement('div');
     ghost.className = 'icon-board-kanban-drag-ghost';
     ghost.textContent = item.text || '…';
     ghost.style.width = `${itemRect.width}px`;
     ghost.style.left = `${itemRect.left}px`;
     ghost.style.top = `${itemRect.top}px`;
     ghost.addClass('ib-no-pointer');
-    document.body.appendChild(ghost);
+    activeDocument.body.appendChild(ghost);
 
     itemEl.addClass('is-dragging');
 
@@ -1794,7 +1795,7 @@ export class FreeformRenderer extends Component {
       targetCard = null;
       insertBeforeItemId = null;
 
-      const els = document.elementsFromPoint(e.clientX, e.clientY);
+      const els = activeDocument.elementsFromPoint(e.clientX, e.clientY);
       let foundCardEl: HTMLElement | null = null;
       let foundCard: KanbanColumnCard | null = null;
       for (const el of els) {
@@ -1811,7 +1812,7 @@ export class FreeformRenderer extends Component {
       if (!tItemsEl) return;
 
       const visItems = Array.from(tItemsEl.querySelectorAll<HTMLElement>('.icon-board-kanban-item:not(.is-dragging)'));
-      dropIndicator = document.createElement('div');
+      dropIndicator = activeDocument.createElement('div');
       dropIndicator.className = 'icon-board-kanban-drop-indicator';
 
       let placed = false;
@@ -1831,8 +1832,8 @@ export class FreeformRenderer extends Component {
     };
 
     const onUp = () => {
-      document.removeEventListener('pointermove', onMove);
-      document.removeEventListener('pointerup', onUp);
+      activeDocument.removeEventListener('pointermove', onMove);
+      activeDocument.removeEventListener('pointerup', onUp);
       ghost.remove();
       removeIndicator();
       itemEl.removeClass('is-dragging');
@@ -1891,8 +1892,8 @@ export class FreeformRenderer extends Component {
       this.scheduleSave();
     };
 
-    document.addEventListener('pointermove', onMove);
-    document.addEventListener('pointerup', onUp);
+    activeDocument.addEventListener('pointermove', onMove);
+    activeDocument.addEventListener('pointerup', onUp);
   }
 
   private async fetchAndUpdateBookmark(card: BookmarkCard, el: HTMLElement): Promise<void> {
@@ -2084,12 +2085,12 @@ export class FreeformRenderer extends Component {
   private populateCardMenu(menu: Menu, el: HTMLElement, card: SupportedCard): void {
     if (card.kind === 'tile') {
       menu.addItem(i => i.setTitle('Edit').setIcon('pencil').onClick(() => {
-        new TileModal(this.app, card, async (updated) => {
+        new TileModal(this.app, card, (updated) => {
           const idx = this.board.cards.findIndex(c => c.id === updated.id);
           if (idx !== -1) {
             this.board.cards[idx] = updated; this.cardEls.delete(card.id);
             this.renderCardContent(el, updated as TileCard); this.bindCardEvents(el, updated as TileCard);
-            this.cardEls.set(updated.id, el); await this.saveNow();
+            this.cardEls.set(updated.id, el); void this.saveNow();
           }
         }, this.file).open();
       }));
@@ -2239,7 +2240,7 @@ export class FreeformRenderer extends Component {
       menu.addItem(i => i.setTitle('Refresh preview').setIcon('refresh-cw').onClick(() => {
         card.fetchFailed = false; card.fetchedAt = undefined;
         this.renderCardContent(el, card); this.bindCardEvents(el, card);
-        this.fetchAndUpdateBookmark(card, el);
+        void this.fetchAndUpdateBookmark(card, el);
       }));
       menu.addItem(i => i.setTitle('Copy URL').setIcon('copy').onClick(() => {
         navigator.clipboard.writeText(card.url); new Notice('URL copied.');
@@ -2404,7 +2405,7 @@ export class FreeformRenderer extends Component {
   // ── Keyboard shortcuts ─────────────────────────────────────────
 
   private onKeyDown(e: KeyboardEvent): void {
-    const active = document.activeElement;
+    const active = activeDocument.activeElement;
     const isTyping = active instanceof HTMLInputElement || active instanceof HTMLTextAreaElement
       || (active instanceof HTMLElement && active.getAttribute('contenteditable') != null);
     if (isTyping) return;
@@ -2487,7 +2488,7 @@ export class FreeformRenderer extends Component {
       const file = this.app.vault.getAbstractFileByPath(card.source.path);
       if (file instanceof TFile) {
         const leaf = this.app.workspace.getLeaf('tab');
-        leaf.openFile(file); this.app.workspace.revealLeaf(leaf);
+        void leaf.openFile(file); this.app.workspace.revealLeaf(leaf);
       }
     } else {
       window.open(card.source.url, '_blank');
@@ -2506,9 +2507,9 @@ export class FreeformRenderer extends Component {
 
   private addTile(): void { const p = this.centerPos(TILE_DEFAULT_W, TILE_DEFAULT_H); this.addTileAt(p.x, p.y); }
   private addTileAt(x: number, y: number): void {
-    new TileModal(this.app, null, async (t) => {
+    new TileModal(this.app, null, (t) => {
       t.x = x; t.y = y; t.w = TILE_DEFAULT_W; t.h = TILE_DEFAULT_H; t.z = this.nextZ();
-      this.pushUndo(); this.board.cards.push(t); await this.saveNow();
+      this.pushUndo(); this.board.cards.push(t); void this.saveNow();
       this.createCardEl(t); this.selection.select(t.id); this.refreshSelectionVisuals();
     }, this.file).open();
   }
@@ -2554,9 +2555,9 @@ export class FreeformRenderer extends Component {
       createCard(newPath, h);
     }).open();
     const fromUpload = () => {
-      const input = document.createElement('input');
+      const input = activeDocument.createElement('input');
       input.type = 'file'; input.accept = IMAGE_EXTS.map(e => `.${e}`).join(',');
-      input.addEventListener('change', async () => {
+      input.addEventListener('change', () => { void (async () => {
         const file = input.files?.[0]; if (!file) return;
         const ext = file.type.includes('png') ? 'png' : file.type.includes('gif') ? 'gif' : file.type.includes('webp') ? 'webp' : 'jpg';
         const base = file.name.replace(/\.[^.]+$/, '');
@@ -2565,7 +2566,7 @@ export class FreeformRenderer extends Component {
         catch { new Notice(`Failed to save ${file.name}.`); return; }
         const h = await this.measureImageH(file);
         createCard(path, h);
-      });
+      })(); });
       input.click();
     };
     new MediaSourceModal(this.app, 'Add image', fromVault, fromUpload).open();
@@ -2583,9 +2584,9 @@ export class FreeformRenderer extends Component {
       createCard(newPath);
     }).open();
     const fromUpload = () => {
-      const input = document.createElement('input');
+      const input = activeDocument.createElement('input');
       input.type = 'file'; input.accept = AUDIO_EXTS.map(e => `.${e}`).join(',');
-      input.addEventListener('change', async () => {
+      input.addEventListener('change', () => { void (async () => {
         const file = input.files?.[0]; if (!file) return;
         const ext = file.name.toLowerCase().endsWith('.mp3') ? 'mp3' : file.name.toLowerCase().endsWith('.ogg') ? 'ogg' : 'wav';
         const base = file.name.replace(/\.[^.]+$/, '');
@@ -2593,7 +2594,7 @@ export class FreeformRenderer extends Component {
         try { path = await saveNewAsset(this.app, await file.arrayBuffer(), `${base}.${ext}`); }
         catch { new Notice(`Failed to save ${file.name}.`); return; }
         createCard(path);
-      });
+      })(); });
       input.click();
     };
     new MediaSourceModal(this.app, 'Add audio', fromVault, fromUpload).open();
@@ -2610,7 +2611,7 @@ export class FreeformRenderer extends Component {
     this.pushUndo(); this.board.cards.push(card); void this.saveNow();
     const el = this.createCardEl(card);
     this.selection.select(card.id); this.refreshSelectionVisuals();
-    this.fetchAndUpdateBookmark(card, el);
+    void this.fetchAndUpdateBookmark(card, el);
   }
 
   // ── Image helpers ──────────────────────────────────────────────
@@ -2637,7 +2638,7 @@ export class FreeformRenderer extends Component {
 
   private async ensureFolder(path: string): Promise<void> {
     if (!this.app.vault.getAbstractFileByPath(path)) {
-      try { await this.app.vault.createFolder(path); } catch {}
+      try { await this.app.vault.createFolder(path); } catch { /* ignore */ }
     }
   }
 
@@ -2880,31 +2881,31 @@ export class FreeformRenderer extends Component {
       case 'tile':
         this.addTileAt(s(cx - TILE_DEFAULT_W / 2), s(cy - TILE_DEFAULT_H / 2)); break;
       case 'tile-board':
-        new TileModal(this.app, null, async (t) => {
+        new TileModal(this.app, null, (t) => {
           t.x = s(cx - TILE_DEFAULT_W / 2); t.y = s(cy - TILE_DEFAULT_H / 2);
           t.w = TILE_DEFAULT_W; t.h = TILE_DEFAULT_H; t.z = this.nextZ();
-          this.pushUndo(); this.board.cards.push(t); await this.saveNow();
+          this.pushUndo(); this.board.cards.push(t); void this.saveNow();
           this.createCardEl(t); this.selection.select(t.id); this.refreshSelectionVisuals();
         }, this.file, 'board').open(); break;
       case 'tile-folder':
-        new TileModal(this.app, null, async (t) => {
+        new TileModal(this.app, null, (t) => {
           t.x = s(cx - TILE_DEFAULT_W / 2); t.y = s(cy - TILE_DEFAULT_H / 2);
           t.w = TILE_DEFAULT_W; t.h = TILE_DEFAULT_H; t.z = this.nextZ();
-          this.pushUndo(); this.board.cards.push(t); await this.saveNow();
+          this.pushUndo(); this.board.cards.push(t); void this.saveNow();
           this.createCardEl(t); this.selection.select(t.id); this.refreshSelectionVisuals();
         }, this.file, 'folder').open(); break;
       case 'tile-canvas':
-        new TileModal(this.app, null, async (t) => {
+        new TileModal(this.app, null, (t) => {
           t.x = s(cx - TILE_DEFAULT_W / 2); t.y = s(cy - TILE_DEFAULT_H / 2);
           t.w = TILE_DEFAULT_W; t.h = TILE_DEFAULT_H; t.z = this.nextZ();
-          this.pushUndo(); this.board.cards.push(t); await this.saveNow();
+          this.pushUndo(); this.board.cards.push(t); void this.saveNow();
           this.createCardEl(t); this.selection.select(t.id); this.refreshSelectionVisuals();
         }, this.file, 'canvas').open(); break;
       case 'tile-note':
-        new TileModal(this.app, null, async (t) => {
+        new TileModal(this.app, null, (t) => {
           t.x = s(cx - TILE_DEFAULT_W / 2); t.y = s(cy - TILE_DEFAULT_H / 2);
           t.w = TILE_DEFAULT_W; t.h = TILE_DEFAULT_H; t.z = this.nextZ();
-          this.pushUndo(); this.board.cards.push(t); await this.saveNow();
+          this.pushUndo(); this.board.cards.push(t); void this.saveNow();
           this.createCardEl(t); this.selection.select(t.id); this.refreshSelectionVisuals();
         }, this.file, 'note').open(); break;
     }
@@ -2941,14 +2942,14 @@ export class FreeformRenderer extends Component {
           const onMove = (me: PointerEvent) => {
             if (!dragging && Math.hypot(me.clientX - sx, me.clientY - sy) > 8) {
               dragging = true;
-              ghost = document.body.createDiv('ib-toolbar-drag-ghost');
+              ghost = activeDocument.body.createDiv('ib-toolbar-drag-ghost');
               setIcon(ghost, icon);
             }
             if (ghost) { ghost.style.left = `${me.clientX}px`; ghost.style.top = `${me.clientY}px`; }
           };
           const onUp = (ue: PointerEvent) => {
-            document.removeEventListener('pointermove', onMove);
-            document.removeEventListener('pointerup', onUp);
+            activeDocument.removeEventListener('pointermove', onMove);
+            activeDocument.removeEventListener('pointerup', onUp);
             ghost?.remove(); ghost = null;
             if (!dragging) return;
             const r = this.outer.getBoundingClientRect();
@@ -2959,8 +2960,8 @@ export class FreeformRenderer extends Component {
             this.pendingToolBtn = null;
             this.placePendingTool(cp.x, cp.y);
           };
-          document.addEventListener('pointermove', onMove);
-          document.addEventListener('pointerup', onUp);
+          activeDocument.addEventListener('pointermove', onMove);
+          activeDocument.addEventListener('pointerup', onUp);
         });
       }
 
@@ -3066,10 +3067,10 @@ export class FreeformRenderer extends Component {
     const onOutside = (e: MouseEvent) => {
       if (!pop.contains(e.target as Node) && e.target !== anchor) {
         this.closeOverflow();
-        document.removeEventListener('mousedown', onOutside);
+        activeDocument.removeEventListener('mousedown', onOutside);
       }
     };
-    window.setTimeout(() => document.addEventListener('mousedown', onOutside), 0);
+    window.setTimeout(() => activeDocument.addEventListener('mousedown', onOutside), 0);
   }
 
   private closeOverflow(): void {
@@ -3131,9 +3132,9 @@ export class FreeformRenderer extends Component {
     pop.style.left = `${eRect.left - cRect.left}px`;
 
     const dismiss = (e: MouseEvent) => {
-      if (!pop.contains(e.target as Node)) { pop.remove(); document.removeEventListener('mousedown', dismiss); }
+      if (!pop.contains(e.target as Node)) { pop.remove(); activeDocument.removeEventListener('mousedown', dismiss); }
     };
-    window.setTimeout(() => document.addEventListener('mousedown', dismiss), 0);
+    window.setTimeout(() => activeDocument.addEventListener('mousedown', dismiss), 0);
   }
 
   // ── Zoom pill ──────────────────────────────────────────────────
@@ -3192,16 +3193,16 @@ export class FreeformRenderer extends Component {
     const ns = 'http://www.w3.org/2000/svg';
 
     // Visual layer — behind cards (first child of inner)
-    const svg = document.createElementNS(ns, 'svg') as SVGSVGElement;
+    const svg = activeDocument.createElementNS(ns, 'svg') as SVGSVGElement;
     svg.classList.add('icon-board-connections-svg');
-    this.svgDefs = document.createElementNS(ns, 'defs') as SVGDefsElement;
+    this.svgDefs = activeDocument.createElementNS(ns, 'defs') as SVGDefsElement;
     svg.appendChild(this.svgDefs);
     if (this.inner.firstChild) this.inner.insertBefore(svg, this.inner.firstChild);
     else this.inner.appendChild(svg);
     this.svgEl = svg;
 
     // Hit layer — above all cards so connection lines are always clickable
-    const hitSvg = document.createElementNS(ns, 'svg') as SVGSVGElement;
+    const hitSvg = activeDocument.createElementNS(ns, 'svg') as SVGSVGElement;
     hitSvg.classList.add('icon-board-connections-hit-svg');
     this.inner.appendChild(hitSvg);
     this.hitSvgEl = hitSvg;
@@ -3225,7 +3226,7 @@ export class FreeformRenderer extends Component {
     const ns = 'http://www.w3.org/2000/svg';
 
     // Wide transparent hit area for easy clicking
-    const hit = document.createElementNS(ns, 'path') as SVGPathElement;
+    const hit = activeDocument.createElementNS(ns, 'path') as SVGPathElement;
     hit.setAttribute('d', d);
     hit.setAttribute('stroke', '#000000');
     hit.setAttribute('stroke-opacity', '0');
@@ -3245,7 +3246,7 @@ export class FreeformRenderer extends Component {
     this.connectionHitPaths.set(conn.id, hit);
 
     // Visible path (pointer-events:none so hit area handles all events)
-    const path = document.createElementNS(ns, 'path') as SVGPathElement;
+    const path = activeDocument.createElementNS(ns, 'path') as SVGPathElement;
     path.setAttribute('d', d);
     path.setAttribute('stroke', conn.color);
     path.setAttribute('stroke-width', String(conn.thickness));
@@ -3300,11 +3301,11 @@ export class FreeformRenderer extends Component {
     if (!conn.label) return;
     const pos = this.connectionLabelPos(conn); if (!pos) return;
     const ns = 'http://www.w3.org/2000/svg';
-    const g = document.createElementNS(ns, 'g') as SVGGElement;
+    const g = activeDocument.createElementNS(ns, 'g') as SVGGElement;
     g.setAttribute('pointer-events', 'none');
-    const bg = getComputedStyle(document.body).getPropertyValue('--background-primary').trim() || '#ffffff';
+    const bg = getComputedStyle(activeDocument.body).getPropertyValue('--background-primary').trim() || '#ffffff';
     const addText = (strokeColor: string | null, fillColor: string) => {
-      const t = document.createElementNS(ns, 'text') as SVGTextElement;
+      const t = activeDocument.createElementNS(ns, 'text') as SVGTextElement;
       t.setAttribute('x', String(pos.x)); t.setAttribute('y', String(pos.y));
       t.setAttribute('text-anchor', 'middle'); t.setAttribute('dominant-baseline', 'central');
       t.setAttribute('font-size', '11');
@@ -3346,7 +3347,7 @@ export class FreeformRenderer extends Component {
       const size = 10 + thickness * 2;
       const mid  = Math.round(size * 0.42);
       const h    = mid * 2;
-      const marker = document.createElementNS(ns, 'marker');
+      const marker = activeDocument.createElementNS(ns, 'marker');
       marker.setAttribute('id', id);
       marker.setAttribute('markerUnits', 'userSpaceOnUse');
       marker.setAttribute('markerWidth', String(size));
@@ -3354,7 +3355,7 @@ export class FreeformRenderer extends Component {
       marker.setAttribute('refX', end === 'end' ? String(size) : '0');
       marker.setAttribute('refY', String(mid));
       marker.setAttribute('orient', end === 'end' ? 'auto' : 'auto-start-reverse');
-      const poly = document.createElementNS(ns, 'polygon');
+      const poly = activeDocument.createElementNS(ns, 'polygon');
       poly.setAttribute('points', `0 0, ${size} ${mid}, 0 ${h}`);
       poly.setAttribute('fill', color);
       marker.appendChild(poly);
@@ -3444,7 +3445,7 @@ export class FreeformRenderer extends Component {
   private updateGhostPath(sx: number, sy: number, tx: number, ty: number): void {
     if (!this.ghostPath) {
       const ns = 'http://www.w3.org/2000/svg';
-      this.ghostPath = document.createElementNS(ns, 'path') as SVGPathElement;
+      this.ghostPath = activeDocument.createElementNS(ns, 'path') as SVGPathElement;
       this.ghostPath.setAttribute('fill', 'none');
       this.ghostPath.setAttribute('stroke', 'var(--interactive-accent)');
       this.ghostPath.setAttribute('stroke-width', '1.5');
@@ -3484,7 +3485,7 @@ export class FreeformRenderer extends Component {
   }
 
   private cardIdAtPoint(clientX: number, clientY: number): string | null {
-    const els = document.elementsFromPoint(clientX, clientY);
+    const els = activeDocument.elementsFromPoint(clientX, clientY);
     for (const el of els) {
       const cardEl = el.closest('[data-id]') as HTMLElement | null;
       if (cardEl?.dataset.id && this.cardEls.has(cardEl.dataset.id)) return cardEl.dataset.id;
@@ -3516,7 +3517,7 @@ export class FreeformRenderer extends Component {
   }
 
   private resolveDefaultConnectionColor(): string {
-    const tmp = document.body.createDiv('ib-color-probe');
+    const tmp = activeDocument.body.createDiv('ib-color-probe');
     const computed = getComputedStyle(tmp).color;
     tmp.remove();
     const m = computed.match(/\d+/g);
@@ -3535,7 +3536,7 @@ export class FreeformRenderer extends Component {
     const d = this.buildConnectionPath(conn); if (!d) return;
 
     const ns = 'http://www.w3.org/2000/svg';
-    this.connectionSelectPath = document.createElementNS(ns, 'path') as SVGPathElement;
+    this.connectionSelectPath = activeDocument.createElementNS(ns, 'path') as SVGPathElement;
     this.connectionSelectPath.setAttribute('d', d);
     this.connectionSelectPath.setAttribute('stroke', 'var(--interactive-accent)');
     this.connectionSelectPath.setAttribute('stroke-width', String(conn.thickness + 6));
@@ -3637,10 +3638,10 @@ export class FreeformRenderer extends Component {
       const btn = thickGroup.createDiv('icon-board-conn-props-btn');
       btn.setAttribute('aria-label', `Thickness ${t}`);
       btn.toggleClass('is-active', conn.thickness === t);
-      const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+      const svg = activeDocument.createElementNS('http://www.w3.org/2000/svg', 'svg');
       svg.setAttribute('width', '20'); svg.setAttribute('height', '16');
       svg.setAttribute('viewBox', '0 0 20 16');
-      const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+      const line = activeDocument.createElementNS('http://www.w3.org/2000/svg', 'line');
       line.setAttribute('x1', '2'); line.setAttribute('y1', '8');
       line.setAttribute('x2', '18'); line.setAttribute('y2', '8');
       line.setAttribute('stroke', 'currentColor');
@@ -3665,10 +3666,10 @@ export class FreeformRenderer extends Component {
       const btn = styleGroup.createDiv('icon-board-conn-props-btn');
       btn.setAttribute('aria-label', style);
       btn.toggleClass('is-active', conn.style === style);
-      const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+      const svg = activeDocument.createElementNS('http://www.w3.org/2000/svg', 'svg');
       svg.setAttribute('width', '22'); svg.setAttribute('height', '16');
       svg.setAttribute('viewBox', '0 0 22 16');
-      const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+      const line = activeDocument.createElementNS('http://www.w3.org/2000/svg', 'line');
       line.setAttribute('x1', '2'); line.setAttribute('y1', '8');
       line.setAttribute('x2', '20'); line.setAttribute('y2', '8');
       line.setAttribute('stroke', 'currentColor');
@@ -3876,7 +3877,7 @@ export class FreeformRenderer extends Component {
         if (card?.kind !== 'bookmark' || !el) return;
         card.fetchFailed = false; card.fetchedAt = undefined;
         this.renderCardContent(el, card); this.bindCardEvents(el, card);
-        this.fetchAndUpdateBookmark(card, el);
+        void this.fetchAndUpdateBookmark(card, el);
         break;
       }
       case 'bookmark-copy-url': {

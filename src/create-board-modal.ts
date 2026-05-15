@@ -80,7 +80,7 @@ export class CreateBoardModal extends Modal {
       .setName('Board name')
       .addText(text => {
         text.setValue(this.boardName).onChange(v => { this.boardName = v; });
-        setTimeout(() => { text.inputEl.select(); text.inputEl.focus(); }, 50);
+        window.setTimeout(() => { text.inputEl.select(); text.inputEl.focus(); }, 50);
       });
 
     // ── Location ──

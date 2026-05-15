@@ -81,7 +81,7 @@ class NamePromptModal extends Modal {
       this.onCreate(name); this.close();
     });
     input.addEventListener('keydown', (e) => { if (e.key === 'Enter') btn.click(); });
-    setTimeout(() => input.focus(), 50);
+    window.setTimeout(() => input.focus(), 50);
   }
 
   onClose(): void { this.contentEl.empty(); }
@@ -141,7 +141,7 @@ export class TileModal extends Modal {
         text.setPlaceholder('My Board').setValue(this.tile.label ?? '').onChange(v => {
           this.tile.label = v;
         });
-        setTimeout(() => text.inputEl.focus(), 50);
+        window.setTimeout(() => text.inputEl.focus(), 50);
       });
 
     // ── Subtitle ──
